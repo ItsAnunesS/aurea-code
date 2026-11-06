@@ -1,0 +1,30 @@
+services:
+  dev:
+    image: aurea-code-dev:latest
+    build: .
+    working_dir: /app
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - cargo_registry:/usr/local/cargo/registry
+      - cargo_git:/usr/local/cargo/git
+      - target:/app/src-tauri/target
+    ports:
+      - "127.0.0.1:1420:1420"
+    command: bash -c "npm ci && npm run dev"
+  ui-test:
+    profiles: [test]
+    image: aurea-code-ui-tests:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.ui-test
+    working_dir: /app
+    volumes:
+      - .:/app
+      - target:/app/src-tauri/target
+    command: bash scripts/run-desktop-smoke.sh
+volumes:
+  node_modules:
+  cargo_registry:
+  cargo_git:
+  target:

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+artifacts/
+src-tauri/gen/
+__pycache__/
+
+# Generated AppImage outputs can also be emitted next to Cargo.toml.
+*.AppImage
+*.AppImage.zsync
