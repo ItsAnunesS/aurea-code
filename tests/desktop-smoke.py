@@ -43,6 +43,17 @@ def click(selector):
     element = value['element-6066-11e4-a52e-4f735466cecf']
     request('POST', f'/session/{SESSION}/element/{element}/click', {})
 
+def enter_launcher():
+    wait_for('document.querySelector("#app").dataset.stage === "launcher" || (document.querySelector("#app").dataset.stage === "updater" && !document.querySelector("#update-continue").disabled)')
+    if execute('return document.querySelector("#app").dataset.stage === "updater"'):
+        try:
+            click('#update-continue')
+        except AssertionError as error:
+            # A successful update check may open the launcher between WebDriver calls.
+            if 'element not interactable' not in str(error) or not execute('return document.querySelector("#app").dataset.stage === "launcher"'):
+                raise
+    wait_for('document.querySelector("#app").dataset.stage === "launcher"')
+
 def input_text(selector, text):
     value = request('POST', f'/session/{SESSION}/element', {'using': 'css selector', 'value': selector})
     element = value['element-6066-11e4-a52e-4f735466cecf']
@@ -76,9 +87,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
     SESSION = result['sessionId']
     try:
         wait_for('document.querySelector("#workspace-select option") !== null')
-        if execute('return document.querySelector("#app").dataset.stage === "updater"'):
-            click('#update-continue')
-        wait_for('document.querySelector("#app").dataset.stage === "launcher"')
+        enter_launcher()
         assert execute('return document.querySelector("#ide-navigation").hidden')
         assert execute('return document.querySelector("#preview-banner").hidden')
         assert execute('return document.documentElement.lang') == 'en'
@@ -105,9 +114,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         second_database = invoke('add_project', {'workspaceId': workspace['id'], 'path': str(second_path)})
         second_registered = second_database['projects'][-1]
         request('POST', f'/session/{SESSION}/refresh', {})
-        wait_for('!document.querySelector("#update-continue").disabled')
-        if execute('return document.querySelector("#app").dataset.stage === "updater"'):
-            click('#update-continue')
+        enter_launcher()
         wait_for('document.querySelector(".project-card") !== null')
         click('.project-title')
         wait_for('document.querySelector(".file-button") !== null')
