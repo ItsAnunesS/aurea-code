@@ -101,7 +101,7 @@ Os instaladores ficam em `src-tauri/target/release/bundle/`. Não estão configu
 
 ### Publicação no GitHub
 
-O workflow `.github/workflows/build.yml` testa e compila Linux e Windows. Em pushes para `main` e pull requests, disponibiliza artefactos sem publicar. Um push de uma tag `v<versão>` publica uma release estável **apenas depois de ambos os builds e testes passarem**, com AppImage, `.zsync` e instaladores Windows juntos.
+O workflow `.github/workflows/build.yml` testa e compila Linux e Windows. A branch principal é `release`. Em pushes para `release` e pull requests, disponibiliza artefactos sem publicar. Um push de uma tag `v<versão>` publica uma release estável **apenas depois de ambos os builds e testes passarem**, com AppImage, `.zsync` e instaladores Windows juntos.
 
 Antes da tag, mantenha a versão igual em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, atualize os lockfiles e execute as verificações. `node scripts/check-version.mjs` valida a consistência. Não reutilize tags ou substitua ficheiros de uma versão já publicada. A fonte de atualizações está fixada em `ItsAnunesS/aurea-code`; forks devem alterá-la no script e no verificador.
 
