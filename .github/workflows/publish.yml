@@ -1,0 +1,53 @@
+name: Publish release
+run-name: Publish ${{ github.ref_name }} from verified artifacts
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    outputs:
+      run_id: ${{ steps.build.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/check-version.mjs
+      - name: Wait for a verified build of this exact commit
+        id: build
+        uses: actions/github-script@v7
+        with:
+          script: await require('./scripts/find-release-build.cjs')({ github, context, core });
+  publish:
+    needs: resolve
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: '*-x86_64'
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.resolve.outputs.run_id }}
+      - name: Publish the complete versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          mapfile -d '' assets < <(find artifacts -type f -print0)
+          gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --latest --title "Aurea Code $RELEASE_TAG" --generate-notes
