@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sqlite3
 import tempfile
 import time
 import http.client
@@ -84,6 +85,9 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
     env_content = 'TOKEN=first-test-secret\nPASSWORD="second-test-secret"\nMULTI="line-one\nline-two"\n'
     (project / '.env').write_text(env_content)
     (project / 'example.py').write_text('def greet(name):\n    return "Hello " + name # greeting\n')
+    with sqlite3.connect(project / 'fixture.db') as database:
+        database.execute('CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT, note TEXT)')
+        database.execute("INSERT INTO people VALUES (1, 'Alice', NULL)")
     subprocess.run(['git', 'init', '-q', directory], check=True)
     subprocess.run(['git', '-C', directory, 'config', 'user.name', 'Aurea Test'], check=True)
     subprocess.run(['git', '-C', directory, 'config', 'user.email', 'test@example.invalid'], check=True)
@@ -143,6 +147,52 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         previous_width = execute('return document.querySelector(".file-sidebar").getBoundingClientRect().width')
         input_text('#explorer-resize', '\ue014')
         assert execute('return document.querySelector(".file-sidebar").getBoundingClientRect().width') > previous_width
+        click('[data-page="database"]')
+        wait_for('document.querySelector("#db-sql .cm-content") !== null')
+        click('#db-new')
+        input_text('#database-modal input[name="name"]', 'Fixture database')
+        execute('const select = document.querySelector("#database-modal select[name=engine]"); select.value = "sqlite"; select.dispatchEvent(new Event("change"));')
+        input_text('#database-modal input[name="database"]', 'fixture.db')
+        click('#database-modal button[type="submit"]')
+        wait_for('document.querySelector(".db-table") !== null')
+        click('.db-table')
+        wait_for('document.querySelector(".db-grid")?.textContent.includes("Alice")')
+        assert execute('return document.querySelector(".db-grid td.null").textContent') == 'NULL'
+        double_click('td[aria-label="Edit name, row 1"]')
+        execute('document.querySelector("#database-modal textarea").value = "Updated Alice";')
+        click('#database-modal button[type="submit"]')
+        assert execute('return document.querySelector("td.pending").textContent') == 'Updated Alice'
+        with sqlite3.connect(project / 'fixture.db') as database:
+            assert database.execute('SELECT name FROM people').fetchone()[0] == 'Alice'
+        click('#db-apply')
+        click('#database-modal button[type="submit"]')
+        wait_for('document.querySelector("#db-status").textContent.includes("rows updated")')
+        with sqlite3.connect(project / 'fixture.db') as database:
+            assert database.execute('SELECT name FROM people').fetchone()[0] == 'Updated Alice'
+        click('#db-structure')
+        assert 'Primary key' in execute('return document.querySelector(".db-grid").textContent')
+        click('#db-data')
+        input_text('#db-sql .cm-content', '\nSELECT id, name FROM people;')
+        click('#db-run')
+        wait_for('document.querySelector("#db-status").textContent.includes("Completed")')
+        assert 'Updated Alice' in execute('return document.querySelector(".db-grid").textContent')
+        assert execute('return document.querySelector("td.editable") === null')
+        Path('/app/artifacts').mkdir(exist_ok=True)
+        Path('/app/artifacts/database-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        click('#db-save-sql')
+        click('#database-modal button[type="submit"]')
+        wait_for('document.querySelector("#db-status").textContent.includes("Saved query.sql")')
+        assert 'SELECT id, name FROM people' in (project / 'query.sql').read_text()
+        saved_connections = invoke('db_connections', {'projectId': registered['id']})
+        assert saved_connections[0]['name'] == 'Fixture database'
+        assert 'password' not in saved_connections[0]
+        assert invoke('db_connections', {'projectId': second_registered['id']}) == []
+        try:
+            invoke('db_tables', {'projectId': second_registered['id'], 'connectionId': saved_connections[0]['id']})
+            raise AssertionError('Foreign database connection was accepted')
+        except AssertionError as error:
+            assert 'Connection not found' in str(error), str(error)
+        click('[data-page="editor"]')
         click('.file-button[title="README.md"]')
         wait_for('document.querySelector(".editor-tab.temporary") !== null')
         click('.file-button[title="example.py"]')
@@ -155,8 +205,8 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelectorAll(".editor-tab").length') == 2
         assert execute('return document.querySelectorAll(".editor-tab.temporary").length') == 1
         assert execute('return document.querySelector(".editor-tab.active .file-type-icon").dataset.fileKind') == 'rust'
-        assert 'Hello Aurea' in execute('return document.querySelector(".cm-content").textContent')
-        input_text('.cm-content', '// edited\n')
+        assert 'Hello Aurea' in execute('return document.querySelector("#code-editor .cm-content").textContent')
+        input_text('#code-editor .cm-content', '// edited\n')
         wait_for('!document.querySelector("#save-file").disabled')
         wait_for('document.querySelectorAll(".editor-tab.temporary").length === 0')
         click('.file-button[title="example.py"]')
@@ -173,7 +223,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('!document.querySelector("#discard-modal").open')
         assert execute('return document.querySelector("#app").dataset.stage') == 'ide'
         click('.editor-tab-select[title="main.rs"]')
-        wait_for('document.querySelector(".cm-content").textContent.includes("// edited")')
+        wait_for('document.querySelector("#code-editor .cm-content").textContent.includes("// edited")')
         assert not execute('return document.querySelector("#save-file").disabled')
         click('#save-file')
         wait_for('document.querySelector("#save-file").disabled')
@@ -182,7 +232,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
 
         click('.file-button[title="example.py"]')
         wait_for('document.querySelector("#editor-title").textContent === "example.py"')
-        input_text('.cm-content', '# discarded edit\n')
+        input_text('#code-editor .cm-content', '# discarded edit\n')
         wait_for('!document.querySelector("#save-file").disabled')
         click('button[aria-label="Close example.py"]')
         wait_for('document.querySelector("#discard-modal").open')
@@ -192,7 +242,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelector("#editor-title").textContent') == 'main.rs'
         assert '// edited' in (project / 'main.rs').read_text()
         (project / 'main.rs').write_text('// external synchronization\n')
-        wait_for('document.querySelector(".cm-content").textContent.includes("external synchronization")')
+        wait_for('document.querySelector("#code-editor .cm-content").textContent.includes("external synchronization")')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/editor-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
         click('.file-button[title="README.md"]')
@@ -201,7 +251,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#document-preview h1")?.textContent === "Project guide"')
         assert not execute('return document.querySelector("#code-editor").hidden')
         assert execute('return document.querySelector("#document-preview table") !== null')
-        input_text('.cm-content', 'Updated ')
+        input_text('#code-editor .cm-content', 'Updated ')
         wait_for('document.querySelector("#document-preview").textContent.includes("Updated")')
         click('#save-file')
         wait_for('document.querySelector("#save-file").disabled')
@@ -212,21 +262,21 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelector("#document-preview").hidden')
         click('.file-button[title="example.py"]')
         wait_for('document.querySelector("#status-file").textContent.includes("Python")')
-        wait_for('new Set([...document.querySelectorAll(".cm-content span")].map(node => getComputedStyle(node).color)).size > 1')
+        wait_for('new Set([...document.querySelectorAll("#code-editor .cm-content span")].map(node => getComputedStyle(node).color)).size > 1')
         click('.file-button[title=".env"]')
         wait_for('document.querySelectorAll(".env-value-toggle").length === 3')
-        assert 'TOKEN=' in execute('return document.querySelector(".cm-content").textContent')
-        assert 'test-secret' not in execute('return document.querySelector(".cm-content").textContent')
-        assert 'line-two' not in execute('return document.querySelector(".cm-content").textContent')
+        assert 'TOKEN=' in execute('return document.querySelector("#code-editor .cm-content").textContent')
+        assert 'test-secret' not in execute('return document.querySelector("#code-editor .cm-content").textContent')
+        assert 'line-two' not in execute('return document.querySelector("#code-editor .cm-content").textContent')
         click('button[aria-label="Reveal value for TOKEN"]')
-        wait_for('document.querySelector(".cm-content").textContent.includes("first-test-secret")')
-        assert 'second-test-secret' not in execute('return document.querySelector(".cm-content").textContent')
+        wait_for('document.querySelector("#code-editor .cm-content").textContent.includes("first-test-secret")')
+        assert 'second-test-secret' not in execute('return document.querySelector("#code-editor .cm-content").textContent')
         click('button[aria-label="Hide value for TOKEN"]')
-        wait_for('!document.querySelector(".cm-content").textContent.includes("first-test-secret")')
+        wait_for('!document.querySelector("#code-editor .cm-content").textContent.includes("first-test-secret")')
         click('button[aria-label="Reveal value for MULTI"]')
-        wait_for('document.querySelector(".cm-content").textContent.includes("line-two")')
+        wait_for('document.querySelector("#code-editor .cm-content").textContent.includes("line-two")')
         click('#reload-file')
-        wait_for('!document.querySelector(".cm-content").textContent.includes("line-two")')
+        wait_for('!document.querySelector("#code-editor .cm-content").textContent.includes("line-two")')
         assert execute('return document.querySelector("#save-file").disabled')
         assert (project / '.env').read_text() == env_content
         Path('/app/artifacts/env-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
@@ -256,14 +306,50 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         # A fixture CLI exercises native Docker routing without granting access to the host daemon.
         docker_fixture = Path('/usr/local/bin/docker')
         assert not docker_fixture.exists(), 'UI test requires an isolated image without Docker'
-        docker_fixture.write_text('#!/usr/bin/env python3\nimport sys,json\n'
+        docker_fixture.write_text('#!/usr/bin/env python3\nimport sys,json,os\n'
             + 'roots = ' + repr({'a' * 64: directory, 'b' * 64: str(second_path)}) + '\n'
-            + "if sys.argv[1] == 'ps': print('\\n'.join(roots))\n"
-            + "elif sys.argv[1] == 'inspect':\n"
-            + " key = sys.argv[-1]; print(json.dumps({'ID':key,'Names':'container-'+key[0],'Image':'test-image','State':'running','Status':'running','Ports':'','labels':{'com.docker.compose.project.working_dir':roots[key]}}))\n"
-            + "elif sys.argv[1] == 'logs': print('project logs')\n"
-            + "else: raise SystemExit('Unexpected mutation')\n")
+            + """if sys.argv[1] == 'ps': print('\\n'.join(roots))
+elif sys.argv[1] == 'inspect':
+ key = sys.argv[-1]
+ if 'directory' in sys.argv[3]:
+  print(json.dumps({'id':key,'name':'/database-'+key[0],'image':'postgres:17-alpine','ports':{'5432/tcp':[{'HostIp':'127.0.0.1','HostPort':'15432'}]},'directory':roots[key]}))
+ else:
+  print(json.dumps({'ID':key,'Names':'container-'+key[0],'Image':'test-image','State':'running','Status':'running','Ports':'','labels':{'com.docker.compose.project.working_dir':roots[key]}}))
+elif sys.argv[1] == 'logs': print('project logs')
+elif sys.argv[1] == 'pull':
+ assert sys.argv[2:] == ['postgres:17-alpine']
+ print('Database client download fixture passed')
+elif sys.argv[1] == 'run':
+ assert '--detach' in sys.argv and '--pull=missing' in sys.argv
+ assert 'fixture-password' not in ' '.join(sys.argv)
+ assert 'com.docker.compose.project.working_dir='+roots['a'*64] in sys.argv
+ assert 'dev.aurea.database=true' in sys.argv
+ assert sys.argv[sys.argv.index('--volume')+1].startswith('aurea-db-')
+ image = sys.argv[-1]
+ prefix = {'postgres:17-alpine':'POSTGRES','mysql:8.4':'MYSQL','mariadb:11.4':'MARIADB'}[image]
+ port = '5432' if prefix == 'POSTGRES' else '3306'
+ assert sys.argv[sys.argv.index('--publish')+1] == '127.0.0.1:15432:'+port
+ assert os.environ[prefix+'_PASSWORD'] == 'fixture-password'
+ print('c'*64)
+else: raise SystemExit('Unexpected mutation')
+""")
         docker_fixture.chmod(0o755)
+        detected = invoke('db_docker_containers', {'projectId': registered['id']})
+        assert len(detected) == 1 and detected[0]['id'] == 'a' * 64
+        for engine, version in [('postgres', '17-alpine'), ('mysql', '8.4'), ('mariadb', '11.4')]:
+            created = invoke('db_create_server', {'projectId': registered['id'], 'request': {'engine': engine, 'version': version, 'port': 15432, 'database': 'fixture', 'username': 'app', 'password': 'fixture-password'}})
+            assert 'created on 127.0.0.1:15432' in created
+            assert 'Volume: aurea-db-' in created
+        click('[data-page="database"]')
+        wait_for('document.querySelector("#db-connections").value !== ""')
+        click('#db-tools')
+        execute('const engine = document.querySelector("#database-modal select[name=engine]"); engine.value = "postgres"; engine.dispatchEvent(new Event("change")); const source = document.querySelector("#database-modal select[name=source]"); source.value = "docker"; source.dispatchEvent(new Event("change"));')
+        click('#database-modal button[type="submit"]')
+        wait_for('document.querySelector("#database-modal select[name=action]") !== null')
+        click('#database-modal button[type="submit"]')
+        wait_for('document.querySelector("#terminal-panel").textContent.includes("Database client download fixture passed")')
+        click('.terminal-tab:first-child')
+        click('[data-page="docker"]')
         click('#docker-refresh')
         wait_for('document.querySelector(".container-row") !== null')
         assert 'container-a' in execute('return document.querySelector("#docker-list").textContent')
@@ -301,7 +387,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         screenshot = request('GET', f'/session/{SESSION}/screenshot')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-preview.png').write_bytes(base64.b64decode(screenshot))
-        print('Desktop smoke passed: independent launcher/IDE, workspaces, editor, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection and tool detection.')
+        print('Desktop smoke passed: independent launcher/IDE, workspaces, editor, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection, database queries/grid edits, Docker database command routing and tool detection.')
     except Exception:
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-failure.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))

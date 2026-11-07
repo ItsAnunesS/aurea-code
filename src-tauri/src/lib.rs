@@ -1,3 +1,4 @@
+mod database;
 mod docker;
 mod files;
 mod process;
@@ -82,6 +83,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(terminal::Terminals::default())
+        .manage(database::DatabaseState::default())
         .manage(Desktop {
             tray_ready: AtomicBool::new(false),
         })
@@ -180,6 +182,17 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            database::tools::db_native_versions,
+            database::tools::db_docker_containers,
+            database::tools::db_create_server,
+            database::db_connections,
+            database::db_save_connection,
+            database::db_remove_connection,
+            database::db_tables,
+            database::db_table,
+            database::db_query,
+            database::db_cancel,
+            database::db_apply,
             store::load_workspace,
             store::create_workspace,
             store::add_project,

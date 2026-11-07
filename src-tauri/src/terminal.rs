@@ -50,20 +50,32 @@ fn size(rows: u16, cols: u16) -> Result<PtySize> {
 pub struct TerminalRequest {
     project_id: String,
     kind: String,
+    tool: Option<crate::database::tools::ToolRequest>,
     rows: u16,
     cols: u16,
 }
 #[tauri::command]
-pub fn terminal_start(
+pub async fn terminal_start(
     app: tauri::AppHandle,
-    store: tauri::State<Store>,
-    terminals: tauri::State<Terminals>,
     request: TerminalRequest,
     on_event: Channel<TerminalEvent>,
 ) -> Result<String> {
+    tauri::async_runtime::spawn_blocking(move || start(app, request, on_event))
+        .await
+        .map_err(error)?
+}
+fn start(
+    app: tauri::AppHandle,
+    request: TerminalRequest,
+    on_event: Channel<TerminalEvent>,
+) -> Result<String> {
+    let state_app = app.clone();
+    let store = state_app.state::<Store>();
+    let terminals = state_app.state::<Terminals>();
     let TerminalRequest {
         project_id,
         kind,
+        tool,
         rows,
         cols,
     } = request;
@@ -73,6 +85,12 @@ pub fn terminal_start(
         return Err("Close a terminal before opening another (maximum: 8).".into());
     }
     let mut command = match kind.as_str() {
+        "database-tool" => crate::database::tools::command(
+            &store,
+            &app.state::<crate::database::DatabaseState>(),
+            &project_id,
+            &tool.ok_or("Missing database tool settings.")?,
+        )?,
         "shell" => {
             #[cfg(windows)]
             let shell = executable("powershell")?;

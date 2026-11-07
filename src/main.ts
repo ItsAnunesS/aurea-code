@@ -1,3 +1,4 @@
+import { DatabaseView } from './database-view';
 import { QuickAccess, type QuickItem } from './quick-access';
 import { resizePanel } from './panel-layout';
 import { fileIconMarkup, fileIconFor, folderIconMarkup } from './file-icons.mjs';
@@ -19,6 +20,7 @@ const icons: Record<string, string> = {
   folder: '<path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11H3Z"/>',
   git: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 7v10m12-10c0 8-12 2-12 8"/>',
   docker: '<path d="M3 12h16c2 0 3-2 3-2 0 8-4 11-10 11S2 18 2 14"/><path d="M5 12V8h4v4m0-4V4h4v8m0-4h4v4"/>',
+  database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>',
   settings: '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/>',
   terminal: '<path d="m4 6 6 6-6 6m9 0h7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -46,10 +48,10 @@ app.innerHTML = `
   </aside>
   <div class="main-shell">
     <header id="ide-header" hidden><button id="back-launcher" class="small-button">← Projects</button><div><strong id="ide-project-name"></strong><small id="ide-project-path"></small></div><button id="quick-open" class="quick-trigger">${icon('search')} <span>Search files</span><kbd>Ctrl P</kbd></button><div id="ide-actions"><button id="start-shell" class="small-button">Terminal</button></div></header>
-    <nav id="ide-navigation" hidden aria-label="Project tools"><button data-page="editor" title="Editor" aria-label="Editor">${icon('code')}<span>Editor</span></button><button data-page="git" title="Source control" aria-label="Source control">${icon('git')}<span>Git</span></button><button data-page="docker" title="Docker Compose" aria-label="Docker Compose">${icon('docker')}<span>Docker</span></button><button id="commands" title="Command palette (Ctrl Shift P)" aria-label="Command palette">${icon('search')}<span>Actions</span></button><button id="toggle-explorer" title="Toggle explorer (Ctrl B)" aria-label="Toggle explorer" aria-pressed="true">${icon('folder')}<span>Project</span></button><button id="ide-reveal" title="Reveal project folder" aria-label="Reveal project folder">${icon('folder')}<span>Folder</span></button></nav>
+    <nav id="ide-navigation" hidden aria-label="Project tools"><button data-page="editor" title="Editor" aria-label="Editor">${icon('code')}<span>Editor</span></button><button data-page="git" title="Source control" aria-label="Source control">${icon('git')}<span>Git</span></button><button data-page="docker" title="Docker Compose" aria-label="Docker Compose">${icon('docker')}<span>Docker</span></button><button data-page="database" title="Databases" aria-label="Databases">${icon('database')}<span>Data</span></button><button id="commands" title="Command palette (Ctrl Shift P)" aria-label="Command palette">${icon('search')}<span>Actions</span></button><button id="toggle-explorer" title="Toggle explorer (Ctrl B)" aria-label="Toggle explorer" aria-pressed="true">${icon('folder')}<span>Project</span></button><button id="ide-reveal" title="Reveal project folder" aria-label="Reveal project folder">${icon('folder')}<span>Folder</span></button></nav>
     <header class="topbar"><div class="breadcrumb"><span id="workspace-name">Personal</span><span>/</span><strong id="page-name">Projects</strong></div><div class="top-actions"><span class="shortcut">Ctrl + O</span><button id="open-top" class="small-button">${icon('folder')} Open project</button></div></header>
     <div id="preview-banner" hidden>Interface preview. Open the desktop app to use files, Git, and Docker.</div>
-    <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>PROJECT</span><button id="collapse-folders" class="icon-button" title="Collapse folders" aria-label="Collapse folders">−</button><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="explorer-root"></div><div id="file-tree"></div><div id="explorer-resize" class="resize-handle" aria-label="Explorer width"></div></aside><div class="editor-area"><div id="editor-tabs" role="tablist" aria-label="Open files" hidden></div><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><span id="document-modes" hidden role="group" aria-label="Document view"><button data-document-mode="code" aria-pressed="true">Code</button><button data-document-mode="split" aria-pressed="false">Split</button><button data-document-mode="preview" aria-pressed="false">Preview</button></span><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Your workspace, ready.</h2><p>Choose a file to start editing.</p><div class="welcome-actions"><button id="empty-search">Go to file <kbd>Ctrl P</kbd></button><button id="empty-commands">All commands <kbd>Ctrl Shift P</kbd></button><button id="empty-terminal">Open terminal <kbd>Ctrl &#96;</kbd></button></div></div><div class="document-workspace"><div id="code-editor"></div><article id="document-preview" class="document-preview" aria-label="Document preview" hidden></article></div></div></section></main>
+    <main id="content"><section id="database-page" hidden aria-label="Database workspace"></section><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>PROJECT</span><button id="collapse-folders" class="icon-button" title="Collapse folders" aria-label="Collapse folders">−</button><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="explorer-root"></div><div id="file-tree"></div><div id="explorer-resize" class="resize-handle" aria-label="Explorer width"></div></aside><div class="editor-area"><div id="editor-tabs" role="tablist" aria-label="Open files" hidden></div><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><span id="document-modes" hidden role="group" aria-label="Document view"><button data-document-mode="code" aria-pressed="true">Code</button><button data-document-mode="split" aria-pressed="false">Split</button><button data-document-mode="preview" aria-pressed="false">Preview</button></span><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Your workspace, ready.</h2><p>Choose a file to start editing.</p><div class="welcome-actions"><button id="empty-search">Go to file <kbd>Ctrl P</kbd></button><button id="empty-commands">All commands <kbd>Ctrl Shift P</kbd></button><button id="empty-terminal">Open terminal <kbd>Ctrl &#96;</kbd></button></div></div><div class="document-workspace"><div id="code-editor"></div><article id="document-preview" class="document-preview" aria-label="Document preview" hidden></article></div></div></section></main>
     <section id="terminal-panel" hidden><div id="terminal-resize" class="resize-handle" aria-label="Terminal height"></div><div class="terminal-toolbar"><span class="panel-label">TERMINAL</span><div id="terminal-tabs"></div><button id="new-terminal" class="icon-button" title="New terminal" aria-label="New terminal">+</button><button id="hide-terminal" class="icon-button" aria-label="Hide terminal" title="Hide terminal">−</button><button id="close-terminal" class="icon-button" aria-label="Close terminal" title="Close terminal">×</button></div><div id="terminal-content"></div></section>
     <footer class="statusbar"><span><span class="dot"></span> <span id="status-text">Aurea Code</span></span><span id="cursor-position"></span><span id="status-file">UTF-8 <span class="status-separator">·</span> Rust + Tauri</span><button id="show-terminal">${icon('terminal')} Terminal</button></footer>
   </div><div id="toast" role="status" aria-live="polite" hidden></div><dialog id="modal"></dialog><dialog id="discard-modal" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Unsaved changes</h2><p id="discard-message"></p><div class="modal-actions"><button id="discard-cancel" class="small-button" value="cancel" autofocus>Cancel</button><button id="discard-confirm" class="primary-button" value="discard">Discard changes</button></div></form></dialog>`;
@@ -69,6 +71,7 @@ const content = element<HTMLElement>('#page-content');
 const editor = new CodeEditor(element('#code-editor'), updateEditorTitle, notify, updateCursorPosition);
 const documentPreview = new DocumentPreview(element('#document-preview'), element('#code-editor'), element('#document-modes'), () => editor.view?.requestMeasure());
 const terminals = new TerminalManager(element('#terminal-panel'), element('#terminal-tabs'), element('#terminal-content'), notify);
+const databaseView = new DatabaseView(element('#database-page'), notify, request => terminals.start(project(), 'database-tool', request));
 function notify(message: string) { const toast = element('#toast'); toast.textContent = message; toast.hidden = false; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { toast.hidden = true; }, 9000); }
 function desktop() { if (!isTauri()) throw new Error('This feature is available in the desktop app.'); }
 function workspace() { return db.workspaces.find(w => w.id === workspaceId) ?? db.workspaces[0]; }
@@ -89,7 +92,7 @@ function confirmDiscard(message: string): Promise<boolean> {
     modal.showModal();
   });
 }
-async function canDiscard(all = true) { return !(all ? editor.hasUnsavedChanges : editor.dirty) || confirmDiscard('You have unsaved changes in open files. Discard them?'); }
+async function canDiscard(all = true) { return !(all ? editor.hasUnsavedChanges || databaseView.dirty : editor.dirty) || confirmDiscard('You have unsaved changes in files, SQL console or the database grid. Discard them?'); }
 function refreshSidebar() {
   const active = workspace(); workspaceId = active.id; localStorage.setItem('aurea.workspace', workspaceId);
   element<HTMLSelectElement>('#workspace-select').innerHTML = db.workspaces.map(w => `<option value="${html(w.id)}" ${w.id === active.id ? 'selected' : ''}>${html(w.name)}</option>`).join('');
@@ -99,25 +102,28 @@ function refreshSidebar() {
   document.querySelectorAll('[data-page]').forEach(node => node.classList.toggle('active', (node as HTMLElement).dataset.page === page));
 }
 async function navigate(next: Page) {
-  if (['editor', 'git', 'docker'].includes(next) && !projectId) { notify('Open a project to use its tools.'); return; }
+  if (['editor', 'git', 'docker', 'database'].includes(next) && !projectId) { notify('Open a project to use its tools.'); return; }
   if (['projects', 'settings'].includes(next) && projectId) {
+    if (databaseView.busy) { notify('Finish or cancel the database operation before leaving the project.'); return; }
     if (!await canDiscard()) return;
     if (terminals.running && !await confirmAction('Returning to the launcher will close this project\'s terminals. Continue?')) return;
-    await terminals.closeAll(); editor.close(); projectId = ''; treeRevision++;
+    await terminals.closeAll(); editor.close(); databaseView.reset(); projectId = ''; treeRevision++;
   }
   stage = projectId ? 'ide' : 'launcher'; app.dataset.stage = stage;
   element('#ide-header').hidden = stage !== 'ide'; element('#ide-navigation').hidden = stage !== 'ide';
   if (stage === 'ide') { element('#ide-project-name').textContent = project().name; element('#ide-project-path').textContent = project().path; }
   page = next; pageRevision++; refreshSidebar();
-    const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', git: 'Source control', docker: 'Docker', settings: 'Environment' };
+    const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', git: 'Source control', docker: 'Docker', database: 'Databases', settings: 'Environment' };
     element('#page-name').textContent = names[page];
-    element('#editor-page').hidden = stage !== 'ide'; content.hidden = page === 'editor';
+    element('#editor-page').hidden = stage !== 'ide' || page === 'database'; content.hidden = page === 'editor' || page === 'database';
+    element('#database-page').hidden = page !== 'database';
     app.dataset.tool = page;
     element('#explorer-root').textContent = projectId ? project().name : '';
     if (page === 'editor') content.replaceChildren();
     if (page === 'projects') renderProjects();
     else if (page === 'git') await renderGit();
     else if (page === 'docker') await renderDocker();
+    else if (page === 'database') await databaseView.activate(project());
     else if (page === 'settings') await renderSettings();
     editor.view?.requestMeasure();
 }
@@ -255,7 +261,8 @@ async function renderSettings() {
   content.innerHTML = heading('DESKTOP INTEGRATION', 'Ready to work.', 'Aurea uses the tools installed on your system.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Local tools and permissions</h3><p>Terminals, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
 }
 async function quit() {
-  if (editor.hasUnsavedChanges && !await confirmDiscard('Quit and discard unsaved changes in open files?')) return;
+  if (databaseView.busy) { notify('Finish or cancel the database operation before quitting.'); return; }
+  if ((editor.hasUnsavedChanges || databaseView.dirty) && !await confirmDiscard('Quit and discard unsaved changes in files, SQL console and database grid?')) return;
   if (terminals.running && !await confirmAction('Terminals are still running. Quitting will close them. Background services may keep running.')) return;
   await invoke('exit_app');
 }
@@ -314,7 +321,7 @@ async function openQuickFiles() {
         if (entry.directory) { if (directories.length < 5000) directories.push(entry.path); }
         else if (items.length < 5000) items.push({
           label: entry.name, detail: entry.path, path: entry.path,
-          run: async () => { if (projectId !== id) return; await editor.open(id, entry.path, true); }
+          run: async () => { if (projectId !== id) return; if (page === 'database') await navigate('editor'); await editor.open(id, entry.path, true); }
         });
       }
     }
@@ -331,6 +338,7 @@ async function openCommands() {
     action('Toggle explorer', 'Ctrl B', toggleExplorer),
     action('New terminal', 'Project', () => terminals.start(project(), 'shell')),
     action('Source control', 'Git', () => navigate('git')),
+    action('Database workspace', 'SQL and tables', () => navigate('database')),
     action('Docker Compose', 'Containers', () => navigate('docker')),
     action('Focus editor', 'Escape tool view', () => navigate('editor')),
     action('Return to projects', 'Launcher', () => navigate('projects')),
@@ -349,7 +357,7 @@ window.addEventListener('keydown', event => {
     if (event.key.toLowerCase() === 'p') { event.preventDefault(); void perform(event.shiftKey ? openCommands : openQuickFiles); }
     else if (event.key.toLowerCase() === 'b') { event.preventDefault(); toggleExplorer(); }
     else if (event.key === '`') { event.preventDefault(); if (!element('#terminal-panel').hidden) terminals.hide(); else element<HTMLButtonElement>('#show-terminal').click(); }
-    else if (event.key.toLowerCase() === 'w' && editor.file) {
+    else if (event.key.toLowerCase() === 'w' && page !== 'database' && editor.file) {
       event.preventDefault(); element<HTMLButtonElement>('.editor-tab.active .editor-tab-close').click();
     }
   }
@@ -361,7 +369,7 @@ async function boot() {
     db = await invoke<Database>('load_workspace'); trayReady = await invoke('desktop_status');
     await listen<string>('native-action', event => void perform(async () => {
       const action = event.payload;
-      if (action === 'open') await addProject(); else if (action === 'workspace') { await navigate('projects'); if (!projectId) newWorkspace(); } else if (action === 'save') await editor.save(); else if (action === 'quit') await quit(); else if (action === 'terminal') await terminals.start(project(), 'shell'); else if (['projects', 'git', 'docker'].includes(action)) await navigate(action as Page);
+      if (action === 'open') await addProject(); else if (action === 'workspace') { await navigate('projects'); if (!projectId) newWorkspace(); } else if (action === 'save') { if (page === 'database') await databaseView.saveSql(); else await editor.save(); } else if (action === 'quit') await quit(); else if (action === 'terminal') await terminals.start(project(), 'shell'); else if (['projects', 'git', 'docker'].includes(action)) await navigate(action as Page);
     }));
     window.setInterval(() => { if (document.visibilityState === 'visible') void editor.sync(); }, 3000);
     window.addEventListener('focus', () => { void editor.sync(); });

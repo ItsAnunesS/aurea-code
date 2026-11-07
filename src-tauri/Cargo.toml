@@ -26,5 +26,15 @@ tempfile = "3"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "mysql", "sqlite"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["time", "sync"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6.3", features = ["windows-native"] }
+
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

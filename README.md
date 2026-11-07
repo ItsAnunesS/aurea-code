@@ -15,6 +15,8 @@ A minimal desktop IDE built with **Rust + Tauri 2**, TypeScript, CodeMirror, and
 - Environment files (`.env`, `.env.*`, and `*.env`) conceal values by default. Each value has an eye button to reveal or hide it for editing. Reopening or reloading from disk hides values again. This is visual masking, not encryption: saving and copying retain the original values.
 - Open-file synchronization every three seconds and on focus. External changes reload automatically when there are no local edits. Saving rejects detected conflicts. Maximum file size: 2 MiB.
 - Real PTY terminals for shells and `docker compose up --build`, with up to eight sessions. Each terminal identifies its project.
+- Database workspace for PostgreSQL, MySQL/MariaDB, and SQLite: per-project connections, schema/table/column explorer, SQL console, editable table grid, result sets, page sorting, and CSV export.
+- Native database clients through the system package manager or versioned official Docker clients; connect published project containers or provision a local development server with a persistent volume.
 - Git status, diffs, staging, history, and commits with normal repository hooks. Open the repository root as a project; subfolders do not inherit a parent project's Git repository.
 - Docker only shows Compose containers whose `com.docker.compose.project.working_dir` label matches the open project. Every action verifies ownership again in the backend. Unlabelled containers stay hidden. Compose requires a file at the project root and does not search parent folders.
 - Native menus, keyboard shortcuts, folder selection, file manager integration, single-instance behavior, and system tray support.
@@ -69,6 +71,36 @@ The IDE shows tools only for the open project. Use **← Projects** to return to
 Workspace and project metadata lives in Tauri's application data directory (`dev.aurea.code`) in `workspace.json`. Existing workspaces and projects remain compatible. The data directory uses Unix permissions `0700`; Windows uses the protection of your user data directory. Native operating system dialogs and external tool output may follow your system or tool language settings.
 
 Closing the window keeps the app in the system tray when available. Use **File → Quit** or the tray menu to exit. Running terminals and unsaved edits require confirmation. GNOME may need an AppIndicator extension to display the tray. Launching the executable again restores the existing window.
+
+## Databases
+
+Open **Data** in the IDE tool bar. Add a connection and select **Connect**. Network connections verify TLS certificates and hostnames by default; explicitly uncheck TLS for a local server that does not use TLS. SQLite opens an existing file relative to the project, including an empty file created in the explorer.
+
+Connection metadata is stored in application data, scoped to the project. Passwords remain in memory for the application session unless **Remember password** is selected. Saved passwords use the operating system credential vault (Secret Service on Linux; Windows Credential Manager). A locked or unavailable vault produces an error, never a plaintext fallback. Docker server passwords are supplied through process environment variables to the official images; Docker administrators can inspect the resulting container environment. They are never written to project files or command-line arguments.
+
+- Browse tables and views, inspect columns and primary keys, and page through 200 rows at a time. Clicking a column heading sorts the loaded page.
+- Double-click a supported non-key cell (or press Enter) to stage a value or SQL NULL. **Apply changes** confirms the target and commits the batch in one transaction. The primary key and original edited values detect conflicting updates; a conflict rolls back the entire batch. MySQL/MariaDB grid editing requires InnoDB. Views, missing/unsupported primary keys, generated columns, and binary columns are read-only in the grid. Use SQL for inserts, deletes, schema changes, and unsupported values.
+- **Run SQL** or Ctrl+Enter executes the selection, or the complete script when there is no selection. Each run uses a new database session; include explicit transactions in one script. Results are limited to 500 rows per statement, 4 MiB total, and fewer than 20 statements per run. Operations time out after 30 seconds. Cancel stops the client request; earlier statements may already have committed.
+- **Save SQL as…** writes a new project file. Pending SQL scripts and grid edits require confirmation before leaving the project. **Export CSV** saves the loaded result page as a new project file, escaping spreadsheet formulas. Neither action overwrites existing files.
+- Metadata discovery is currently limited to 500 tables/views or columns per request. SSH tunnels, database migrations, row insertion/deletion controls, and vendor-specific administration tools are not included.
+
+### Clients and Docker servers
+
+The graphical workspace uses bundled Rust drivers and works without downloading CLI tools. **Clients & versions** manages optional interactive command-line clients separately:
+
+- **Native** lists the package versions available in APT on Debian/Ubuntu or winget on Windows. Installation runs visibly in the integrated terminal, with normal package verification and system elevation. Windows vendor packages can also contain server components. Other Linux distributions require manual installation with their own package manager. Installed native clients must be accessible on PATH; restart the app after installation when necessary.
+- **Docker** accepts an explicit tag from the official postgres, mysql, or mariadb repository. Download the image or start an ephemeral interactive client for the selected connection. Linux loopback connections use host networking; Windows uses the Docker host gateway. Remote Docker contexts may require an explicitly reachable connection host. SQLite is embedded and offers an optional native console, not a Docker server.
+- **Connect Docker container** lists running project containers with published PostgreSQL/MySQL ports. It reads names, images, labels, and published ports only; enter credentials explicitly. Use a direct connection for containers outside the project, remote Docker contexts, or custom ports.
+- **Create Docker server** downloads the selected official image if needed and creates a uniquely named container and volume. Ports bind to 127.0.0.1; existing data and containers are never replaced. The connection is saved for the current session; click **Connect** after server initialization. The project Docker panel can manage the container. Removing a connection does not delete the server or its volume.
+
+Network integration tests use temporary PostgreSQL, MySQL, and MariaDB servers with no published ports:
+
+~~~sh
+docker compose --profile database-test run --rm database-test
+docker compose --profile database-test rm --stop --force db-postgres db-mysql db-mariadb
+~~~
+
+SQLite, scope, conflict/rollback, query-limit, and CSV tests also run in the normal checks. The desktop smoke test exercises connection creation, SQL execution, grid edits, and SQL-file saving with a temporary SQLite database. Native package installation and Windows credential-vault interaction require platform validation.
 
 ## Builds and Gear Lever
 

@@ -24,6 +24,59 @@ services:
       - .:/app
       - target:/app/src-tauri/target
     command: bash scripts/run-desktop-smoke.sh
+  db-postgres:
+    profiles: [database-test]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: aurea
+      POSTGRES_PASSWORD: aurea-test-only
+      POSTGRES_DB: aurea_test
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U aurea -d aurea_test"]
+      interval: 3s
+      retries: 30
+  db-mysql:
+    profiles: [database-test]
+    image: mysql:8.4
+    environment:
+      MYSQL_USER: aurea
+      MYSQL_PASSWORD: aurea-test-only
+      MYSQL_ROOT_PASSWORD: aurea-test-root-only
+      MYSQL_DATABASE: aurea_test
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      test: [CMD, mysqladmin, ping, --host=127.0.0.1, --silent]
+      interval: 3s
+      retries: 60
+  db-mariadb:
+    profiles: [database-test]
+    image: mariadb:11.4
+    environment:
+      MARIADB_USER: aurea
+      MARIADB_PASSWORD: aurea-test-only
+      MARIADB_ROOT_PASSWORD: aurea-test-root-only
+      MARIADB_DATABASE: aurea_test
+    tmpfs: [/var/lib/mysql]
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 3s
+      retries: 60
+  database-test:
+    profiles: [database-test]
+    image: aurea-code-dev:latest
+    working_dir: /app
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - cargo_registry:/usr/local/cargo/registry
+      - cargo_git:/usr/local/cargo/git
+      - target:/app/src-tauri/target
+    depends_on:
+      db-postgres: {condition: service_healthy}
+      db-mysql: {condition: service_healthy}
+      db-mariadb: {condition: service_healthy}
+    command: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib database::engine::tests::network_engines -- --ignored --test-threads=1
 volumes:
   node_modules:
   cargo_registry:

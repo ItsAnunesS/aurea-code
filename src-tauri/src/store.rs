@@ -32,6 +32,8 @@ pub struct Database {
     pub version: u32,
     pub workspaces: Vec<Workspace>,
     pub projects: Vec<Project>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub connections: Vec<crate::database::ConnectionConfig>,
 }
 impl Default for Database {
     fn default() -> Self {
@@ -42,6 +44,7 @@ impl Default for Database {
                 name: "Personal".into(),
             }],
             projects: vec![],
+            connections: vec![],
         }
     }
 }
