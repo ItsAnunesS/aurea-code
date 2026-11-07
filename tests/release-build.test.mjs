@@ -28,13 +28,33 @@ test('missing, failed, or expired builds block publication instead of compiling 
   await assert.rejects(resolve([[valid]], assets.map(a => ({ ...a, expired: true }))), /No complete successful build/);
   await assert.rejects(resolve([[valid]], assets.map(a => ({ ...a, size_in_bytes: 0 }))), /No complete successful build/);
 });
+function assertPublicationOrder(source) {
+  const publication = source.replace(/\r\n/g, '\n').match(/^  publish:\n((?:    .*\n|\n)*)/m)?.[1];
+  assert.ok(publication, 'Publication job must exist.');
+  const checkout = publication.indexOf('actions/checkout@');
+  const download = publication.indexOf('actions/download-artifact@');
+  assert.ok(checkout >= 0, 'Publication must check out the release scripts.');
+  assert.ok(download >= 0, 'Publication must download the verified installers.');
+  assert.ok(checkout < download, 'Checkout must not clean already-downloaded installers.');
+}
 test('tag publication has no compilation jobs or fallback artifact source', () => {
   const build = readFileSync('.github/workflows/build.yml', 'utf8');
   const publish = readFileSync('.github/workflows/publish.yml', 'utf8');
   assert.doesNotMatch(build.split('\npermissions:')[0], /tags:/);
   assert.doesNotMatch(publish, /cargo |npm run (?:build|tauri[^\n]*build)|docker (?:compose|build)|workflow_dispatch:/);
   assert.match(publish, /node scripts\/sign-release\.mjs/);
-  const publication = publish.slice(publish.indexOf('  publish:\n'));
-  assert.ok(publication.indexOf('actions/checkout@') < publication.indexOf('actions/download-artifact@'), 'Checkout must not clean already-downloaded installers.');
+  assertPublicationOrder(publish);
   assert.match(publish, /run-id: \$\{\{ needs\.resolve\.outputs\.run_id \}\}/);
+});
+test('publication ordering supports LF and CRLF and rejects missing or reversed steps', () => {
+  const publication = '  publish:\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/download-artifact@v4\n';
+  for (const newline of ['\n', '\r\n']) {
+    const source = publication.replace(/\n/g, newline);
+    assertPublicationOrder(source);
+    assert.throws(() => assertPublicationOrder(source.replace('  publish:', '  other:')), /Publication job must exist/);
+    assert.throws(() => assertPublicationOrder(source.replace('actions/checkout@', 'missing@')), /must check out/);
+    assert.throws(() => assertPublicationOrder(source.replace('actions/download-artifact@', 'missing@')), /must download/);
+    assert.throws(() => assertPublicationOrder(source.replace(/actions\/(checkout|download-artifact)@/g, (_, action) => action === 'checkout' ? 'actions/download-artifact@' : 'actions/checkout@')), /Checkout must not clean/);
+    assert.throws(() => assertPublicationOrder(`  publish:${newline}    steps: []${newline}  other:${newline}${source.split(newline).slice(1).join(newline)}`), /must check out/);
+  }
 });
