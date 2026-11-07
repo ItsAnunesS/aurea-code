@@ -27,7 +27,7 @@ export class CodeEditor {
   private busy = false;
   private revision = 0;
   private nextId = 0;
-  constructor(private host: HTMLElement, private changed: () => void, private report: (message: string) => void) {}
+  constructor(private host: HTMLElement, private changed: () => void, private report: (message: string) => void, private selectionChanged: () => void = () => {}) {}
   get file() { return this.active; }
   get languageName() { return this.active?.languageName ?? 'Plain text'; }
   isDirty(tab: EditorTab) { return tab.state.doc.toString() !== tab.original; }
@@ -64,9 +64,9 @@ export class CodeEditor {
         if (update.docChanged) {
           if (update.transactions.some(transaction => transaction.docChanged && !transaction.annotation(externalChange))) tab.pinned = true;
           this.changed();
-        }
+        } else if (update.selectionSet) this.selectionChanged();
       }),
-      EditorView.theme({ '&': { height: '100%', backgroundColor: '#191c1f' }, '.cm-scroller': { fontFamily: '"Cascadia Code", "SFMono-Regular", Consolas, monospace', fontSize: '13px' }, '.cm-gutters': { backgroundColor: '#191c1f', border: 'none' }, '.cm-content': { paddingTop: '18px' } })] });
+      EditorView.theme({ '&': { height: '100%', backgroundColor: '#191c1f' }, '.cm-scroller': { fontFamily: '"Cascadia Code", "SFMono-Regular", Consolas, monospace', fontSize: '13px' }, '.cm-gutters': { backgroundColor: '#191c1f', border: 'none' }, '.cm-content': { paddingTop: '10px' } })] });
     const replace = existing ?? this.tabs.find(value => !value.pinned && !this.isDirty(value));
     if (replace) this.tabs.splice(this.tabs.indexOf(replace), 1, tab); else this.tabs.push(tab);
     this.activate(tab);

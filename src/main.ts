@@ -1,3 +1,5 @@
+import { QuickAccess, type QuickItem } from './quick-access';
+import { resizePanel } from './panel-layout';
 import { fileIconMarkup, fileIconFor, folderIconMarkup } from './file-icons.mjs';
 import { DocumentPreview } from './document-preview';
 import { resolveDocumentLink } from './document-renderer.mjs';
@@ -8,15 +10,15 @@ import { open, confirm } from '@tauri-apps/plugin-dialog';
 import { CodeEditor } from './editor';
 import { TerminalManager } from './terminals';
 import { escapeHtml as html, parseContainers } from './utils.mjs';
-import type { Database, FileEntry, Page, Profile, Project, ToolStatus } from './types';
+import type { Database, FileEntry, Page, Project, ToolStatus } from './types';
 import './style.css';
+import './workbench.css';
 
 const icons: Record<string, string> = {
   projects: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   folder: '<path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11H3Z"/>',
   git: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 7v10m12-10c0 8-12 2-12 8"/>',
   docker: '<path d="M3 12h16c2 0 3-2 3-2 0 8-4 11-10 11S2 18 2 14"/><path d="M5 12V8h4v4m0-4V4h4v8m0-4h4v4"/>',
-  accounts: '<circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3m1-17a3 3 0 0 1 0 6m2 4c3 1 3 3 3 6"/>',
   settings: '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="16" cy="17" r="3"/>',
   terminal: '<path d="m4 6 6 6-6 6m9 0h7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -32,28 +34,27 @@ app.insertAdjacentHTML('beforebegin', `<header class="window-bar" aria-label="Ap
 app.innerHTML = `
 
   <aside class="sidebar">
-    <div class="brand"><img class="brand-mark" src="/aurea-mark.svg" alt="" aria-hidden="true"><span>Aurea<span class="brand-light"> Code</span></span><span class="version">MVP</span></div>
+    <div class="brand"><img class="brand-mark" src="/aurea-mark.svg" alt="" aria-hidden="true"><span>Aurea<span class="brand-light"> Code</span></span></div>
     <div class="workspace-label">WORKSPACE <button id="new-workspace" class="icon-button" title="New workspace" aria-label="New workspace">+</button></div>
     <select id="workspace-select" aria-label="Active workspace"></select>
     <nav aria-label="Main navigation">
       <button data-page="projects">${icon('projects')} Projects <span id="project-count" class="count">0</span></button>
-      <button data-page="accounts">${icon('accounts')} AI accounts</button>
 
     </nav>
     <div class="sidebar-projects"><div class="nav-label">IN THIS WORKSPACE</div><div id="project-shortcuts"></div></div>
     <div class="sidebar-bottom"><button data-page="settings">${icon('settings')} Environment</button><div class="local-indicator"><span class="dot"></span> Local by design <span>↗</span></div></div>
   </aside>
   <div class="main-shell">
-    <header id="ide-header" hidden><button id="back-launcher" class="small-button">← Projects</button><div><strong id="ide-project-name"></strong><small id="ide-project-path"></small></div><div id="ide-agents"></div></header>
-    <nav id="ide-navigation" hidden aria-label="Project tools"><button data-page="editor">${icon('code')} Editor</button><button data-page="git">${icon('git')} Git</button><button data-page="docker">${icon('docker')} Docker</button><button id="ide-reveal">${icon('folder')} Folder</button></nav>
+    <header id="ide-header" hidden><button id="back-launcher" class="small-button">← Projects</button><div><strong id="ide-project-name"></strong><small id="ide-project-path"></small></div><button id="quick-open" class="quick-trigger">${icon('search')} <span>Search files</span><kbd>Ctrl P</kbd></button><div id="ide-actions"><button id="start-shell" class="small-button">Terminal</button></div></header>
+    <nav id="ide-navigation" hidden aria-label="Project tools"><button data-page="editor" title="Editor" aria-label="Editor">${icon('code')}<span>Editor</span></button><button data-page="git" title="Source control" aria-label="Source control">${icon('git')}<span>Git</span></button><button data-page="docker" title="Docker Compose" aria-label="Docker Compose">${icon('docker')}<span>Docker</span></button><button id="commands" title="Command palette (Ctrl Shift P)" aria-label="Command palette">${icon('search')}<span>Actions</span></button><button id="toggle-explorer" title="Toggle explorer (Ctrl B)" aria-label="Toggle explorer" aria-pressed="true">${icon('folder')}<span>Project</span></button><button id="ide-reveal" title="Reveal project folder" aria-label="Reveal project folder">${icon('folder')}<span>Folder</span></button></nav>
     <header class="topbar"><div class="breadcrumb"><span id="workspace-name">Personal</span><span>/</span><strong id="page-name">Projects</strong></div><div class="top-actions"><span class="shortcut">Ctrl + O</span><button id="open-top" class="small-button">${icon('folder')} Open project</button></div></header>
-    <div id="preview-banner" hidden>Interface preview. Open the desktop app to use files, accounts, Git, and Docker.</div>
-    <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>EXPLORER</span><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="file-tree"></div></aside><div class="editor-area"><div id="editor-tabs" role="tablist" aria-label="Open files" hidden></div><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><span id="document-modes" hidden role="group" aria-label="Document view"><button data-document-mode="code" aria-pressed="true">Code</button><button data-document-mode="split" aria-pressed="false">Split</button><button data-document-mode="preview" aria-pressed="false">Preview</button></span><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Room to create.</h2><p>Open a file in the explorer or start an agent.</p></div><div class="document-workspace"><div id="code-editor"></div><article id="document-preview" class="document-preview" aria-label="Document preview" hidden></article></div></div></section></main>
-    <section id="terminal-panel" hidden><div class="terminal-toolbar"><div id="terminal-tabs"></div><button id="hide-terminal" class="icon-button" aria-label="Hide terminal" title="Hide terminal">−</button><button id="close-terminal" class="icon-button" aria-label="Close terminal" title="Close terminal">×</button></div><div id="terminal-content"></div></section>
-    <footer class="statusbar"><span><span class="dot"></span> <span id="status-text">Aurea Code</span></span><span id="status-file">UTF-8 <span class="status-separator">·</span> Rust + Tauri</span><button id="show-terminal">${icon('terminal')} Terminal</button></footer>
+    <div id="preview-banner" hidden>Interface preview. Open the desktop app to use files, Git, and Docker.</div>
+    <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>PROJECT</span><button id="collapse-folders" class="icon-button" title="Collapse folders" aria-label="Collapse folders">−</button><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="explorer-root"></div><div id="file-tree"></div><div id="explorer-resize" class="resize-handle" aria-label="Explorer width"></div></aside><div class="editor-area"><div id="editor-tabs" role="tablist" aria-label="Open files" hidden></div><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><span id="document-modes" hidden role="group" aria-label="Document view"><button data-document-mode="code" aria-pressed="true">Code</button><button data-document-mode="split" aria-pressed="false">Split</button><button data-document-mode="preview" aria-pressed="false">Preview</button></span><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Your workspace, ready.</h2><p>Choose a file to start editing.</p><div class="welcome-actions"><button id="empty-search">Go to file <kbd>Ctrl P</kbd></button><button id="empty-commands">All commands <kbd>Ctrl Shift P</kbd></button><button id="empty-terminal">Open terminal <kbd>Ctrl &#96;</kbd></button></div></div><div class="document-workspace"><div id="code-editor"></div><article id="document-preview" class="document-preview" aria-label="Document preview" hidden></article></div></div></section></main>
+    <section id="terminal-panel" hidden><div id="terminal-resize" class="resize-handle" aria-label="Terminal height"></div><div class="terminal-toolbar"><span class="panel-label">TERMINAL</span><div id="terminal-tabs"></div><button id="new-terminal" class="icon-button" title="New terminal" aria-label="New terminal">+</button><button id="hide-terminal" class="icon-button" aria-label="Hide terminal" title="Hide terminal">−</button><button id="close-terminal" class="icon-button" aria-label="Close terminal" title="Close terminal">×</button></div><div id="terminal-content"></div></section>
+    <footer class="statusbar"><span><span class="dot"></span> <span id="status-text">Aurea Code</span></span><span id="cursor-position"></span><span id="status-file">UTF-8 <span class="status-separator">·</span> Rust + Tauri</span><button id="show-terminal">${icon('terminal')} Terminal</button></footer>
   </div><div id="toast" role="status" aria-live="polite" hidden></div><dialog id="modal"></dialog><dialog id="discard-modal" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Unsaved changes</h2><p id="discard-message"></p><div class="modal-actions"><button id="discard-cancel" class="small-button" value="cancel" autofocus>Cancel</button><button id="discard-confirm" class="primary-button" value="discard">Discard changes</button></div></form></dialog>`;
 
-let db: Database = { version: 1, workspaces: [{ id: 'preview', name: 'Personal', profile_ids: [] }], profiles: [], projects: [] };
+let db: Database = { version: 1, workspaces: [{ id: 'preview', name: 'Personal' }], projects: [] };
 let tools: ToolStatus[] = [];
 let workspaceId = localStorage.getItem('aurea.workspace') ?? '';
 let projectId = '';
@@ -65,7 +66,7 @@ let toastTimer = 0;
 let trayReady = false;
 let treeRevision = 0;
 const content = element<HTMLElement>('#page-content');
-const editor = new CodeEditor(element('#code-editor'), updateEditorTitle, notify);
+const editor = new CodeEditor(element('#code-editor'), updateEditorTitle, notify, updateCursorPosition);
 const documentPreview = new DocumentPreview(element('#document-preview'), element('#code-editor'), element('#document-modes'), () => editor.view?.requestMeasure());
 const terminals = new TerminalManager(element('#terminal-panel'), element('#terminal-tabs'), element('#terminal-content'), notify);
 function notify(message: string) { const toast = element('#toast'); toast.textContent = message; toast.hidden = false; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { toast.hidden = true; }, 9000); }
@@ -73,7 +74,6 @@ function desktop() { if (!isTauri()) throw new Error('This feature is available 
 function workspace() { return db.workspaces.find(w => w.id === workspaceId) ?? db.workspaces[0]; }
 function projects() { return db.projects.filter(p => p.workspace_id === workspace().id); }
 function project() { const value = db.projects.find(p => p.id === projectId); if (!value) throw new Error('Open a project first.'); return value; }
-function profiles() { return db.profiles.filter(p => workspace().profile_ids.includes(p.id)); }
 async function perform(action: () => Promise<unknown>) { try { await action(); } catch (error) { notify(String(error)); } }
 function bind(selector: string, action: (button: HTMLButtonElement) => Promise<unknown> | unknown) {
   document.querySelectorAll<HTMLButtonElement>(selector).forEach(button => { button.onclick = () => { button.disabled = true; void perform(async () => { try { await action(button); } finally { button.disabled = false; updateEditorTitle(); } }); }; });
@@ -96,11 +96,11 @@ function refreshSidebar() {
   element('#workspace-name').textContent = active.name; element('#project-count').textContent = String(projects().length);
   element('#project-shortcuts').innerHTML = projects().map(p => `<button class="project-shortcut ${p.id === projectId ? 'selected' : ''}" data-project="${html(p.id)}">${icon('folder')}<span>${html(p.name)}</span></button>`).join('') || '<p class="sidebar-hint">Your projects appear here.</p>';
   bind('[data-project]', button => openProject(button.dataset.project!));
-  document.querySelectorAll('[data-page]').forEach(node => node.classList.toggle('active', (node as HTMLElement).dataset.page === (page === 'editor' ? 'projects' : page)));
+  document.querySelectorAll('[data-page]').forEach(node => node.classList.toggle('active', (node as HTMLElement).dataset.page === page));
 }
 async function navigate(next: Page) {
   if (['editor', 'git', 'docker'].includes(next) && !projectId) { notify('Open a project to use its tools.'); return; }
-  if (['projects', 'accounts', 'settings'].includes(next) && projectId) {
+  if (['projects', 'settings'].includes(next) && projectId) {
     if (!await canDiscard()) return;
     if (terminals.running && !await confirmAction('Returning to the launcher will close this project\'s terminals. Continue?')) return;
     await terminals.closeAll(); editor.close(); projectId = ''; treeRevision++;
@@ -109,32 +109,26 @@ async function navigate(next: Page) {
   element('#ide-header').hidden = stage !== 'ide'; element('#ide-navigation').hidden = stage !== 'ide';
   if (stage === 'ide') { element('#ide-project-name').textContent = project().name; element('#ide-project-path').textContent = project().path; }
   page = next; pageRevision++; refreshSidebar();
-    const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', accounts: 'AI accounts', git: 'Source control', docker: 'Docker', settings: 'Environment' };
+    const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', git: 'Source control', docker: 'Docker', settings: 'Environment' };
     element('#page-name').textContent = names[page];
-    element('#editor-page').hidden = page !== 'editor'; content.hidden = page === 'editor';
-    document.querySelector('.editor-agent-bar')?.remove();
-    if (stage === 'ide') renderEditorActions();
+    element('#editor-page').hidden = stage !== 'ide'; content.hidden = page === 'editor';
+    app.dataset.tool = page;
+    element('#explorer-root').textContent = projectId ? project().name : '';
     if (page === 'editor') content.replaceChildren();
     if (page === 'projects') renderProjects();
-    else if (page === 'accounts') renderAccounts();
     else if (page === 'git') await renderGit();
     else if (page === 'docker') await renderDocker();
     else if (page === 'settings') await renderSettings();
-    else { editor.view?.requestMeasure(); }
+    editor.view?.requestMeasure();
 }
-function heading(eyebrow: string, title: string, description: string, action = '') { return `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`; }
-function agentControls() { return `<div class="agent-controls"><select id="agent-profile" aria-label="Agent account">${profiles().map(p => `<option value="${html(p.id)}">${html(p.provider === 'codex' ? 'Codex' : 'Claude')} · ${html(p.name)}</option>`).join('') || '<option value="">Add an AI account</option>'}</select><button id="start-agent" class="primary-button">${icon('terminal')} Start agent</button><button id="start-shell" class="small-button">Terminal</button></div>`; }
-function wireAgents() {
-  bind('#start-agent', async () => { desktop(); const selected = profiles().find(p => p.id === element<HTMLSelectElement>('#agent-profile').value); if (!selected) { await navigate('accounts'); return; } await terminals.start(project(), 'agent', selected); });
-  bind('#start-shell', () => { desktop(); return terminals.start(project(), 'shell'); });
-}
+function heading(eyebrow: string, title: string, description: string, action = '') { return `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div>${action}${stage === 'ide' ? '<button id="close-tool" class="icon-button" aria-label="Close tool panel" title="Close tool panel">×</button>' : ''}</div>`; }
 function renderProjects() {
   const list = projects();
   content.innerHTML = heading('WELCOME TO AUREA CODE', 'Projects', 'Choose where to continue working.', `<button id="add-project" class="primary-button">${icon('folder')} Open folder</button>`) + `
     <div class="list-heading"><h2>In this workspace</h2><label class="search-field">${icon('search')}<input id="project-search" placeholder="Search projects…" aria-label="Search projects"></label></div>
     <div id="project-grid" class="project-grid">${list.map(p => `<article class="project-card" data-card-name="${html((p.name + ' ' + p.path).toLowerCase())}"><span class="folder-tile">${icon('folder')}</span><div><button class="project-title" data-project="${html(p.id)}">${html(p.name)}</button><p class="project-path" title="${html(p.path)}">${html(p.path)}</p></div><button data-project="${html(p.id)}" class="small-button">Open ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><h2>Your next project starts here.</h2><p>Open a folder on your computer to enter the IDE.</p></div>'}</div>
-    <div class="getting-started"><div><h3>Codex and Claude, with your accounts.</h3><p>Manage this workspace\'s profiles before opening a project.</p></div><button id="configure-accounts" class="text-button">Manage accounts ${icon('arrow')}</button></div>`;
-  bind('#add-project, #add-project-card', addProject); bind('[data-project]', b => openProject(b.dataset.project!)); bind('#configure-accounts', () => navigate('accounts')); wireAgents();
+    `;
+  bind('#add-project, #add-project-card', addProject); bind('[data-project]', b => openProject(b.dataset.project!));
   element<HTMLInputElement>('#project-search').oninput = event => { const query = (event.target as HTMLInputElement).value.toLowerCase(); document.querySelectorAll<HTMLElement>('[data-card-name]').forEach(card => { card.hidden = !card.dataset.cardName!.includes(query); }); };
 }
 async function addProject() {
@@ -148,12 +142,6 @@ async function openProject(id: string) {
   terminals.activate(id);
   if (id !== projectId) editor.close(); projectId = id;
   await navigate('editor'); await renderTree();
-}
-function renderEditorActions() {
-  const selected = document.querySelector<HTMLSelectElement>('#agent-profile')?.value;
-  element('#ide-agents').innerHTML = agentControls();
-  if (selected && profiles().some(profile => profile.id === selected)) element<HTMLSelectElement>('#agent-profile').value = selected;
-  wireAgents();
 }
 async function renderTree() {
   const revision = ++treeRevision; const id = projectId; const tree = element('#file-tree'); tree.replaceChildren();
@@ -210,10 +198,16 @@ function renderEditorTabs() {
     node.querySelector('.editor-tab-close')!.setAttribute('aria-label', `Close ${tab.path}`);
   }
 }
+function updateCursorPosition() {
+  const selection = editor.view?.state.selection.main;
+  const line = selection && editor.view?.state.doc.lineAt(selection.head);
+  element('#cursor-position').textContent = line && selection ? `Ln ${line.number}, Col ${selection.head - line.from + 1}` : '';
+}
 function updateEditorTitle() {
   renderEditorTabs();
   document.querySelectorAll<HTMLElement>('.file-button').forEach(button => button.classList.toggle('selected', button.title === editor.file?.path));
   documentPreview.update(editor.file ? `${editor.file.projectId}/${editor.file.path}` : '', editor.view?.state.doc.toString() ?? '');
+  updateCursorPosition();
   element('#status-file').textContent = editor.file ? `UTF-8 · ${editor.languageName}` : 'UTF-8 · Rust + Tauri';
   element('#editor-title').textContent = editor.file ? `${editor.dirty ? '● ' : ''}${editor.file.path}` : 'Select a file';
   element('#editor-empty').hidden = !!editor.file;
@@ -229,13 +223,7 @@ function formDialog(title: string, fields: string, submit: (data: FormData) => P
     void submit(new FormData(event.target as HTMLFormElement)).then(() => modal.close()).catch(error => { element('#modal-error').textContent = String(error); }).finally(() => { button.disabled = false; }); };
   modal.showModal(); modal.querySelector<HTMLInputElement>('input')?.focus();
 }
-function newWorkspace() { desktop(); formDialog('New workspace', '<label>Name<input name="title" placeholder="e.g. Work" maxlength="80" required autocomplete="off"></label><p class="muted">Group projects and choose the AI accounts to use.</p>', async data => { if (!await canDiscard()) return; db = await invoke('create_workspace', { title: data.get('title') }); workspaceId = db.workspaces.at(-1)!.id; projectId = ''; editor.close(); await navigate('projects'); }); }
-function renderAccounts() {
-  content.innerHTML = heading('CODEX & CLAUDE', 'A space for every account.', 'Local profiles with separate settings and sessions, linked to this workspace.', `<button id="new-profile" class="primary-button">${icon('plus')} New account</button>`) + `<div class="account-grid">${profiles().map(p => `<article class="account-card"><div class="provider-mark ${p.provider}">${p.provider === 'codex' ? '✳' : '✴'}</div><h2>${html(p.name)}</h2><p>${p.provider === 'codex' ? 'OpenAI Codex' : 'Claude Code'}</p><span class="badge">Local profile</span><p class="account-help">The official CLI shows the sign-in flow and active identity when you start the agent.</p><button class="small-button" data-connect="${html(p.id)}">Choose project ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><span class="empty-icon">✳</span><h2>Bring your agents.</h2><p>Create a profile for each personal or work account.<br>Credentials are managed by the official CLIs.</p></div>'}</div><div class="info-box"><h3>How it works</h3><p>Create a profile, open a project, and start the agent. Sign in through the official terminal. To switch accounts, start a new session with another profile; existing sessions keep their original account.</p><p>Profiles separate settings. Processes still run with your operating system user permissions.</p></div>${db.profiles.some(p => !workspace().profile_ids.includes(p.id)) ? `<div class="link-profile"><h3>Use an account from another workspace</h3><select id="existing-profile" aria-label="Existing account">${db.profiles.filter(p => !workspace().profile_ids.includes(p.id)).map(p => `<option value="${html(p.id)}">${html(p.name)} · ${html(p.provider)}</option>`).join('')}</select><button id="link-profile" class="small-button">Link account</button></div>` : ''}`;
-  bind('#new-profile', () => { desktop(); formDialog('New AI account', '<label>Profile name<input name="title" placeholder="e.g. Personal Codex" maxlength="80" required></label><label>Agent<select name="provider"><option value="codex">OpenAI Codex</option><option value="claude">Claude Code</option></select></label>', async data => { db = await invoke('create_profile', { workspaceId, title: data.get('title'), provider: data.get('provider') }); refreshSidebar(); renderAccounts(); }); });
-  bind('[data-connect]', () => { notify('Open a project and select this account at the top of the IDE to sign in.'); return navigate('projects'); });
-  bind('#link-profile', async () => { db = await invoke('link_profile', { workspaceId, profileId: element<HTMLSelectElement>('#existing-profile').value }); renderAccounts(); });
-}
+function newWorkspace() { desktop(); formDialog('New workspace', '<label>Name<input name="title" placeholder="e.g. Work" maxlength="80" required autocomplete="off"></label><p class="muted">Group your local projects in a workspace.</p>', async data => { if (!await canDiscard()) return; db = await invoke('create_workspace', { title: data.get('title') }); workspaceId = db.workspaces.at(-1)!.id; projectId = ''; editor.close(); await navigate('projects'); }); }
 async function renderGit() {
   const current = project(); const revision = pageRevision;
   content.innerHTML = heading('SOURCE CONTROL', html(current.name), 'Review changes and create commits without leaving your project.', '<button id="git-refresh" class="small-button">↻ Refresh</button>') + `<div class="git-layout"><div><h3>Repository status</h3><pre id="git-status" class="output">Loading…</pre><div class="button-row"><button id="git-stage" class="small-button">Stage all</button><button id="git-unstage" class="small-button">Unstage</button></div><label class="commit-label">Commit message<textarea id="commit-message" placeholder="feat: describe your change" rows="3" maxlength="4096"></textarea></label><button id="git-commit" class="primary-button">${icon('check')} Create commit</button><p class="muted small">Repository hooks are respected.</p></div><div><div class="tabs"><button data-git-view="diff" class="active">Changes</button><button data-git-view="staged">Staging</button><button data-git-view="log">History</button></div><pre id="git-output" class="output diff">Loading…</pre></div></div>`;
@@ -264,7 +252,7 @@ async function renderSettings() {
   const revision = pageRevision;
   if (isTauri()) tools = await invoke('tools_status');
   if (revision !== pageRevision) return;
-  content.innerHTML = heading('DESKTOP INTEGRATION', 'Ready to work.', 'Aurea uses the tools installed on your system.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker', 'codex', 'claude'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Accounts and security</h3><p>Sign-in stays in the official CLIs. Aurea does not request API keys or copy credentials into projects. Agents, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
+  content.innerHTML = heading('DESKTOP INTEGRATION', 'Ready to work.', 'Aurea uses the tools installed on your system.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Local tools and permissions</h3><p>Terminals, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
 }
 async function quit() {
   if (editor.hasUnsavedChanges && !await confirmDiscard('Quit and discard unsaved changes in open files?')) return;
@@ -286,7 +274,8 @@ async function updateWindowControls() {
   button.title = maximized ? 'Restore' : 'Maximize';
   button.setAttribute('aria-label', button.title);
 }
-bind('[data-page]', b => navigate(b.dataset.page as Page));
+bind('[data-page]', b => navigate(stage === 'ide' && page === b.dataset.page && page !== 'editor' ? 'editor' : b.dataset.page as Page));
+bind('#start-shell, #new-terminal, #empty-terminal', () => { desktop(); return terminals.start(project(), 'shell'); });
 bind('#back-launcher', () => navigate('projects')); bind('#ide-reveal', () => invoke('reveal_project', { projectId }));
 bind('#new-workspace', newWorkspace); bind('#open-top', addProject);
 bind('#new-file', () => { const current = project(); formDialog('New file', '<label>Path relative to the project<input name="path" placeholder="e.g. src/main.rs" required></label><p class="muted">The destination folder must exist. Existing files will not be overwritten.</p>', async data => { const path = String(data.get('path')); await invoke('create_file', { projectId: current.id, relative: path }); await renderTree(); await editor.open(current.id, path, true); }); });
@@ -303,6 +292,68 @@ bind('#save-file', () => editor.save()); bind('#reload-file', async () => { if (
 bind('#hide-terminal', () => terminals.hide()); bind('#close-terminal', async () => { if (await confirmAction('Close this terminal? The running process will be stopped.')) await terminals.closeSelected(); });
 bind('#show-terminal', () => { desktop(); if (terminals.sessions.length) terminals.show(); else return terminals.start(project(), 'shell'); });
 element<HTMLSelectElement>('#workspace-select').onchange = event => void perform(async () => { const next = (event.target as HTMLSelectElement).value; if (!await canDiscard()) { refreshSidebar(); return; } workspaceId = next; projectId = ''; editor.close(); await navigate('projects'); });
+const quickAccess = new QuickAccess(notify);
+function toggleExplorer() {
+  const hidden = app.classList.toggle('explorer-hidden');
+  element('#toggle-explorer').setAttribute('aria-pressed', String(!hidden));
+  editor.view?.requestMeasure();
+}
+async function openQuickFiles() {
+  if (!projectId) return;
+  const id = projectId;
+  await quickAccess.open('Search files by name or path…', async signal => {
+    const items: QuickItem[] = [];
+    const directories = [''];
+    let visited = 0;
+    while (directories.length && visited < 100 && items.length < 5000) {
+      if (signal.aborted) return { items: [] };
+      if (projectId !== id) throw new Error('The project changed. Open search again.');
+      const entries = await invoke<FileEntry[]>('list_files', { projectId: id, relative: directories.shift()! });
+      visited++;
+      for (const entry of entries) {
+        if (entry.directory) { if (directories.length < 5000) directories.push(entry.path); }
+        else if (items.length < 5000) items.push({
+          label: entry.name, detail: entry.path, path: entry.path,
+          run: async () => { if (projectId !== id) return; await editor.open(id, entry.path, true); }
+        });
+      }
+    }
+    return { items, note: directories.length || items.length >= 5000 ? 'Search limited to 100 folders / 5,000 files. Use the explorer for other files.' : `${items.length} files in this project · type to filter` };
+  });
+}
+async function openCommands() {
+  if (!projectId) return;
+  const action = (label: string, detail: string, run: QuickItem['run']): QuickItem => ({ label, detail, run });
+  await quickAccess.open('Type a command…', async () => ({ items: [
+    action('Go to file', 'Ctrl P', openQuickFiles),
+    action('Save current file', 'Ctrl S', () => editor.save()),
+    action('New file', 'Project', () => element<HTMLButtonElement>('#new-file').click()),
+    action('Toggle explorer', 'Ctrl B', toggleExplorer),
+    action('New terminal', 'Project', () => terminals.start(project(), 'shell')),
+    action('Source control', 'Git', () => navigate('git')),
+    action('Docker Compose', 'Containers', () => navigate('docker')),
+    action('Focus editor', 'Escape tool view', () => navigate('editor')),
+    action('Return to projects', 'Launcher', () => navigate('projects')),
+  ] }));
+}
+content.addEventListener('click', event => { if ((event.target as HTMLElement).closest('#close-tool')) void perform(() => navigate('editor')); });
+bind('#quick-open, #empty-search', openQuickFiles);
+bind('#commands, #empty-commands', openCommands);
+bind('#toggle-explorer', toggleExplorer);
+bind('#collapse-folders', () => document.querySelectorAll<HTMLDetailsElement>('#file-tree details').forEach(node => { node.open = false; }));
+resizePanel(element('#explorer-resize'), app, '--explorer-width', 'aurea.explorer-width', 240, 160, () => Math.min(480, window.innerWidth * .4), 'x');
+resizePanel(element('#terminal-resize'), app, '--terminal-height', 'aurea.terminal-height', 240, 100, () => window.innerHeight * .65, 'y');
+window.addEventListener('keydown', event => {
+  if (!projectId || document.querySelector('dialog[open]')) return;
+  if (event.ctrlKey || event.metaKey) {
+    if (event.key.toLowerCase() === 'p') { event.preventDefault(); void perform(event.shiftKey ? openCommands : openQuickFiles); }
+    else if (event.key.toLowerCase() === 'b') { event.preventDefault(); toggleExplorer(); }
+    else if (event.key === '`') { event.preventDefault(); if (!element('#terminal-panel').hidden) terminals.hide(); else element<HTMLButtonElement>('#show-terminal').click(); }
+    else if (event.key.toLowerCase() === 'w' && editor.file) {
+      event.preventDefault(); element<HTMLButtonElement>('.editor-tab.active .editor-tab-close').click();
+    }
+  }
+});
 async function boot() {
   if (isTauri()) {
     await updateWindowControls();

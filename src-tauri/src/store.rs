@@ -15,23 +15,10 @@ pub fn id() -> String {
     Uuid::new_v4().to_string()
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Provider {
-    Codex,
-    Claude,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Profile {
-    pub id: String,
-    pub name: String,
-    pub provider: Provider,
-}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: String,
     pub name: String,
-    pub profile_ids: Vec<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Project {
@@ -44,7 +31,6 @@ pub struct Project {
 pub struct Database {
     pub version: u32,
     pub workspaces: Vec<Workspace>,
-    pub profiles: Vec<Profile>,
     pub projects: Vec<Project>,
 }
 impl Default for Database {
@@ -54,9 +40,7 @@ impl Default for Database {
             workspaces: vec![Workspace {
                 id: id(),
                 name: "Personal".into(),
-                profile_ids: vec![],
             }],
-            profiles: vec![],
             projects: vec![],
         }
     }
@@ -107,12 +91,6 @@ impl Store {
             .cloned()
             .ok_or("Project not found.".into())
     }
-    pub fn profile_home(&self, profile: &Profile) -> Result<PathBuf> {
-        Uuid::parse_str(&profile.id).map_err(error)?;
-        let directory = self.directory.join("profiles").join(&profile.id);
-        private_directory(&directory)?;
-        Ok(directory)
-    }
 }
 pub fn name(value: &str) -> Result<String> {
     let value = value.trim();
@@ -156,54 +134,7 @@ pub fn create_workspace(store: tauri::State<Store>, title: String) -> Result<Dat
         db.workspaces.push(Workspace {
             id: id(),
             name: title,
-            profile_ids: vec![],
         });
-        Ok(())
-    })
-}
-#[tauri::command]
-pub fn create_profile(
-    store: tauri::State<Store>,
-    workspace_id: String,
-    title: String,
-    provider: Provider,
-) -> Result<Database> {
-    let title = name(&title)?;
-    let profile = Profile {
-        id: id(),
-        name: title,
-        provider,
-    };
-    store.profile_home(&profile)?;
-    store.update(|db| {
-        let workspace = db
-            .workspaces
-            .iter_mut()
-            .find(|w| w.id == workspace_id)
-            .ok_or("Workspace not found.")?;
-        workspace.profile_ids.push(profile.id.clone());
-        db.profiles.push(profile);
-        Ok(())
-    })
-}
-#[tauri::command]
-pub fn link_profile(
-    store: tauri::State<Store>,
-    workspace_id: String,
-    profile_id: String,
-) -> Result<Database> {
-    store.update(|db| {
-        if !db.profiles.iter().any(|p| p.id == profile_id) {
-            return Err("Profile not found.".into());
-        }
-        let workspace = db
-            .workspaces
-            .iter_mut()
-            .find(|w| w.id == workspace_id)
-            .ok_or("Workspace not found.")?;
-        if !workspace.profile_ids.contains(&profile_id) {
-            workspace.profile_ids.push(profile_id);
-        }
         Ok(())
     })
 }
@@ -281,28 +212,32 @@ mod tests {
         assert_eq!(store.snapshot().unwrap().workspaces.len(), 1);
     }
     #[test]
-    fn profile_directories_are_distinct() {
+    fn existing_workspaces_survive_obsolete_metadata() {
         let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("workspace.json");
+        let project_path = dir.path().join("project");
+        let legacy = serde_json::json!({
+            "version": 1,
+            "workspaces": [{"id": "work", "name": "Work", "profile_ids": ["old"]}],
+            "profiles": [{"id": "old", "name": "Legacy", "provider": "retired"}],
+            "projects": [{"id": "project", "name": "Project", "path": project_path, "workspace_id": "work"}]
+        });
+        fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
         let store = Store::open(dir.path().to_path_buf()).unwrap();
-        let a = Profile {
-            id: id(),
-            name: "a".into(),
-            provider: Provider::Codex,
-        };
-        let b = Profile {
-            id: id(),
-            name: "b".into(),
-            provider: Provider::Codex,
-        };
-        assert_ne!(
-            store.profile_home(&a).unwrap(),
-            store.profile_home(&b).unwrap()
-        );
-        let invalid = Profile {
-            id: "../escape".into(),
-            ..a
-        };
-        assert!(store.profile_home(&invalid).is_err());
+        assert_eq!(store.snapshot().unwrap().workspaces[0].name, "Work");
+        assert_eq!(store.project("project").unwrap().path, project_path);
+        store
+            .update(|db| {
+                db.workspaces[0].name = "Renamed".into();
+                Ok(())
+            })
+            .unwrap();
+        let reloaded = Store::open(dir.path().to_path_buf()).unwrap();
+        assert_eq!(reloaded.snapshot().unwrap().workspaces[0].name, "Renamed");
+        assert_eq!(reloaded.project("project").unwrap().workspace_id, "work");
+        let saved: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert!(saved.get("profiles").is_none());
+        assert!(saved["workspaces"][0].get("profile_ids").is_none());
     }
     #[test]
     fn validates_names() {

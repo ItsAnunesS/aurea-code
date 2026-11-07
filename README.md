@@ -5,14 +5,16 @@ A minimal desktop IDE built with **Rust + Tauri 2**, TypeScript, CodeMirror, and
 ## Features
 
 - Three-stage startup: update check, project launcher, and a dedicated IDE for the open project. No plugins or marketplace.
-- Persistent workspaces with multiple local projects and separate Codex/Claude profiles.
+- Persistent workspaces with multiple local projects.
 - File explorer, file creation, and editing with syntax highlighting detected from filenames and extensions (JavaScript/TypeScript, Rust, Python, Go, HTML/CSS, YAML, SQL, Shell, Markdown, and more). Language support loads on demand from bundled assets, including offline. Unknown UTF-8 formats open as plain text. Search and undo/redo are included.
+- Compact workbench with a vertical tool bar, Git and Docker panels alongside the editor, and resizable explorer/terminal panels. Panel sizes are remembered locally.
+- Quick file access (Ctrl+P), command palette (Ctrl+Shift+P), explorer toggle (Ctrl+B), terminal toggle (Ctrl+backtick), and close current tab (Ctrl+W). File search refreshes on each opening, respects explorer exclusions, and scans up to 100 folders / 5,000 files with an explicit limit notice.
 - File-type icons identify languages and special files (environment, Docker, Git, dependency manifests, and lockfiles) consistently in the explorer and tabs.
 - Editor tabs preserve each file’s unsaved text, cursor, scroll position, and undo history. Single-click opens a temporary tab; opening another file replaces that tab. Double-click or editing pins it. Closing a dirty tab, leaving the project, or quitting requires confirmation before discarding edits, including edits in background tabs.
 - Documentation preview with Code / Split / Preview modes and live updates for Markdown (`.md`, `.markdown`, `.mdown`, `.mkd`). Text documentation (`.txt`, `.rst`, `.adoc`, `.asciidoc`, and extensionless README/LICENSE) has a plain-text reading view. Markdown includes tables, lists, and code blocks; embedded HTML is escaped and images appear as placeholders. Project-relative links open in the editor; HTTP(S) links open in the default browser.
 - Environment files (`.env`, `.env.*`, and `*.env`) conceal values by default. Each value has an eye button to reveal or hide it for editing. Reopening or reloading from disk hides values again. This is visual masking, not encryption: saving and copying retain the original values.
 - Open-file synchronization every three seconds and on focus. External changes reload automatically when there are no local edits. Saving rejects detected conflicts. Maximum file size: 2 MiB.
-- Real PTY terminals for shells, Codex, Claude, and `docker compose up --build`, with up to eight sessions. Each terminal identifies its project and account.
+- Real PTY terminals for shells and `docker compose up --build`, with up to eight sessions. Each terminal identifies its project.
 - Git status, diffs, staging, history, and commits with normal repository hooks. Open the repository root as a project; subfolders do not inherit a parent project's Git repository.
 - Docker only shows Compose containers whose `com.docker.compose.project.working_dir` label matches the open project. Every action verifies ownership again in the backend. Unlabelled containers stay hidden. Compose requires a file at the project root and does not search parent folders.
 - Native menus, keyboard shortcuts, folder selection, file manager integration, single-instance behavior, and system tray support.
@@ -41,9 +43,9 @@ docker compose build ui-test
 docker compose run --rm ui-test
 ```
 
-The smoke test uses temporary projects and an isolated data directory. It verifies English UI defaults, workspaces, profiles, file saving/synchronization, real Git and PTY operations, and switching between two projects. A fixture CLI tests Docker scoping and rejects actions on another project's containers. It does not use real agent accounts or mount the host Docker socket. Screenshots are saved under `artifacts/`.
+The smoke test uses temporary projects and an isolated data directory. It verifies English UI defaults, workspaces, file saving/synchronization, real Git and PTY operations, and switching between two projects. A fixture CLI tests Docker scoping and rejects actions on another project's containers. It does not mount the host Docker socket. Screenshots are saved under `artifacts/`.
 
-For a browser-only preview, run `docker compose up dev` and visit `http://localhost:1420`. The preview is explicitly labelled and does not simulate access to files, Git, Docker, or agents.
+For a browser-only preview, run `docker compose up dev` and visit `http://localhost:1420`. The preview is explicitly labelled and does not simulate access to files, Git, or Docker.
 
 To run the desktop app on your computer with access to its display and local tools:
 
@@ -58,22 +60,19 @@ Docker volumes isolate `node_modules` and Rust build outputs from the host. The 
 
 1. The standalone `aurea-code` updater checks the signed GitHub update manifest, downloads and verifies a newer installer, installs it, and restarts. Only then does it start the separate `aurea-ide` executable at the project launcher. If checking or installation fails, retry or explicitly open the installed version. Close the IDE (including its tray instance) before updating. On Windows, installation may request elevation according to the original installation scope.
 2. In the launcher, create a workspace or use **Personal**.
-3. Under **AI accounts**, create a Codex or Claude profile for each account. You can link a profile to multiple workspaces.
-4. Use **Open folder** to select an existing folder, or create one through the native dialog.
-5. Select a profile in the IDE and click **Start agent**. Sign in through the official CLI. Aurea does not provide or bypass provider subscriptions.
-6. Install `git`, `docker`, `codex`, and/or `claude` as native executables on `PATH`. **Environment** shows detected paths. On Windows, this version requires `.exe` executables rather than npm `.cmd` wrappers. Restart Aurea after installing tools.
+3. Use **Open folder** to select an existing folder, or create one through the native dialog.
+4. Open files from the explorer or click **Terminal** to start a shell in the project directory.
+5. Install `git` and `docker` as native executables on `PATH`. **Environment** shows detected paths. On Windows, this version requires `.exe` executables rather than npm `.cmd` wrappers. Restart Aurea after installing tools.
 
 The IDE shows tools only for the open project. Use **← Projects** to return to the launcher. Unsaved changes and active terminals require confirmation; sessions close before switching projects.
 
-Codex receives a separate `CODEX_HOME` for each profile; Claude receives a separate `CLAUDE_CONFIG_DIR`. Common inherited authentication variables are removed from agent sessions so a parent API key does not silently override the selected account. Sign-in, tokens, approvals, and history remain managed by the official CLIs. Switching profiles starts a new session without changing existing sessions.
-
-Metadata lives in Tauri's application data directory (`dev.aurea.code`). `workspace.json` does not store tokens. Profile directories use Unix permissions `0700`; Windows uses the protection of your user data directory. Profiles separate configuration, not operating system permissions. Enterprise policies, credential helpers, and CLI settings still apply. Native operating system dialogs and external tool output may follow your system or tool language settings.
+Workspace and project metadata lives in Tauri's application data directory (`dev.aurea.code`) in `workspace.json`. Existing workspaces and projects remain compatible. The data directory uses Unix permissions `0700`; Windows uses the protection of your user data directory. Native operating system dialogs and external tool output may follow your system or tool language settings.
 
 Closing the window keeps the app in the system tray when available. Use **File → Quit** or the tray menu to exit. Running terminals and unsaved edits require confirmation. GNOME may need an AppIndicator extension to display the tray. Launching the executable again restores the existing window.
 
 ## Builds and Gear Lever
 
-The package contains two executables: `aurea-code` (updater) and `aurea-ide` (launcher and IDE). Both are built together; the desktop shortcut starts the updater. The updater stays hidden while the IDE runs to keep Linux AppImage mounts alive. Their windows and native command handlers are separate; project/account data remains in `dev.aurea.code`.
+The package contains two executables: `aurea-code` (updater) and `aurea-ide` (launcher and IDE). Both are built together; the desktop shortcut starts the updater. The updater stays hidden while the IDE runs to keep Linux AppImage mounts alive. Their windows and native command handlers are separate; workspace/project data remains in `dev.aurea.code`.
 
 Release publication signs the already-built AppImage, EXE, and MSI and produces `latest.json`. The public key is in `tauri.conf.json`; the private key must never enter Git. Before publishing, configure the repository Actions secret `TAURI_SIGNING_PRIVATE_KEY` with the local `.aurea-signing/updater.key` contents, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key is encrypted. Back up the private key securely: future updates must use the same key. Local signing material is ignored by Git. Normal branch builds and pull requests do not need signing secrets. The tag workflow requires them and never recompiles the application.
 
@@ -129,11 +128,9 @@ Keep versions aligned in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/taur
 
 ## MVP limitations
 
-- Codex/Claude integration uses their real interactive CLIs. It does not mirror web/desktop history or provide a graphical app-server/Agent SDK chat.
 - No semantic autocomplete/LSP, debugger, VS Code extensions, online collaboration, branch/remote management, or graphical Git conflict resolution. Use the terminal for advanced operations.
 - The explorer hides `.git`, `node_modules`, `target`, and symbolic links. Binary editing is unsupported. Synchronization follows the open file; refresh the explorer to reload its tree.
-- Git and Docker commands use separate arguments without shell interpolation. UI commands are restricted to the implemented operations. Interactive terminals retain normal execution capabilities and user permissions. Only open trusted projects: configuration, hooks, agents, and Compose can execute code.
+- Git and Docker commands use separate arguments without shell interpolation. UI commands are restricted to the implemented operations. Interactive terminals retain normal execution capabilities and user permissions. Only open trusted projects: configuration, hooks, and Compose can execute code.
 - Closing a terminal stops its main process. Docker services and deliberately detached processes may keep running. Save-conflict detection is not a distributed lock against concurrent external writers.
-- Validate sign-in and account switching with your CLI versions and credential policies. Aurea does not read or display tokens.
 
-References: [Tauri](https://v2.tauri.app/), [Codex state directories](https://learn.chatgpt.com/docs/config-file/environment-variables), [Claude settings](https://code.claude.com/docs/en/settings), [AppImage updates](https://docs.appimage.org/packaging-guide/optional/updates.html), [Gear Lever](https://github.com/mijorus/gearlever).
+References: [Tauri](https://v2.tauri.app/), [AppImage updates](https://docs.appimage.org/packaging-guide/optional/updates.html), [Gear Lever](https://github.com/mijorus/gearlever).

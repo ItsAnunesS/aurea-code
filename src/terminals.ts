@@ -1,7 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import type { Profile, Project } from './types';
+import type { Project } from './types';
 import '@xterm/xterm/css/xterm.css';
 
 type TerminalEvent = { type: 'output'; data: number[] } | { type: 'exit'; code: string } | { type: 'error'; message: string };
@@ -25,7 +25,7 @@ export class TerminalManager {
     for (const item of this.sessions) { item.host.hidden = item !== session; item.tab.classList.toggle('active', item === session); }
     requestAnimationFrame(() => { session.fit.fit(); session.terminal.focus(); });
   }
-  async start(project: Project, kind: 'shell' | 'agent' | 'compose', profile?: Profile) {
+  async start(project: Project, kind: 'shell' | 'compose') {
     if (this.closing || project.id !== this.projectId) throw new Error('The project is no longer active.');
     if (this.opening) return;
     if (this.sessions.length >= 8) throw new Error('Close a terminal before opening another (maximum: 8).');
@@ -35,7 +35,7 @@ export class TerminalManager {
     const terminal = new Terminal({ cursorBlink: true, fontFamily: '"Cascadia Code", Consolas, monospace', fontSize: 12, scrollback: 3000, theme: { background: '#131618', foreground: '#d5d8d8', cursor: '#dfc18c', selectionBackground: '#66553e' }, allowProposedApi: false });
     const fit = new FitAddon(); terminal.loadAddon(fit); terminal.open(host);
     const tab = document.createElement('button'); tab.className = 'terminal-tab';
-    const label = `${project.name} · ${profile ? `${profile.provider} / ${profile.name}` : kind === 'compose' ? 'Compose' : 'Terminal'}`;
+    const label = `${project.name} · ${kind === 'compose' ? 'Compose' : 'Terminal'}`;
     tab.textContent = label; this.tabs.append(tab);
     const channel = new Channel<TerminalEvent>();
     const observer = new ResizeObserver(() => { if (!host.hidden && !this.panel.hidden) fit.fit(); }); observer.observe(host);
@@ -48,7 +48,7 @@ export class TerminalManager {
     };
     terminal.onData(data => { if (session.id && !session.exited) void invoke('terminal_write', { sessionId: session.id, data }).catch(e => this.report(String(e))); });
     terminal.onResize(({ rows, cols }) => { if (session.id && !session.exited) void invoke('terminal_resize', { sessionId: session.id, rows, cols }).catch(e => this.report(String(e))); });
-    try { fit.fit(); session.id = await invoke<string>('terminal_start', { request: { projectId: project.id, kind, profileId: profile?.id ?? null, rows: Math.max(2, terminal.rows), cols: Math.max(2, terminal.cols) }, onEvent: channel }); }
+    try { fit.fit(); session.id = await invoke<string>('terminal_start', { request: { projectId: project.id, kind, rows: Math.max(2, terminal.rows), cols: Math.max(2, terminal.cols) }, onEvent: channel }); }
     catch (error) { this.dispose(session); throw error; }
     finally { this.opening = false; }
   }

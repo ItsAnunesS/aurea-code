@@ -2,7 +2,7 @@
 name = "aurea-code"
 default-run = "aurea-code"
 version = "0.2.1"
-description = "Local IDE with workspaces, Codex, and Claude"
+description = "Local IDE with workspaces, Git, and Docker"
 authors = []
 edition = "2021"
 rust-version = "1.99"

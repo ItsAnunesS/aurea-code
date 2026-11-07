@@ -182,8 +182,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             store::load_workspace,
             store::create_workspace,
-            store::create_profile,
-            store::link_profile,
             store::add_project,
             store::remove_project,
             files::list_files,

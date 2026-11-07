@@ -106,14 +106,10 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         click('#modal button[type="submit"]')
         wait_for('!document.querySelector("#modal").open')
         assert execute('return document.querySelector("#workspace-name").textContent') == 'Test workspace'
-        click('[data-page="accounts"]')
-        click('#new-profile')
-        input_text('#modal input[name="title"]', 'Test Codex')
-        click('#modal button[type="submit"]')
-        wait_for('document.querySelector(".account-card") !== null')
         database = invoke('load_workspace')
         workspace = next(w for w in database['workspaces'] if w['name'] == 'Test workspace')
-        assert len(workspace['profile_ids']) == 1
+        assert set(workspace) == {'id', 'name'}
+        assert set(database) == {'version', 'workspaces', 'projects'}
         database = invoke('add_project', {'workspaceId': workspace['id'], 'path': directory})
         registered = database['projects'][-1]
         second_path = project / 'another-project'
@@ -129,6 +125,24 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelector(\'.file-button[title="main.rs"] > svg\').dataset.fileKind') == 'rust'
         assert execute('return document.querySelector(\'.file-button[title="example.py"] > svg\').dataset.fileKind') == 'python'
         assert execute('return document.querySelector(\'.file-button[title=".env"] > svg\').dataset.fileKind') == 'env'
+        click('#quick-open')
+        wait_for('document.querySelectorAll("#quick-results button").length > 0')
+        input_text('#quick-input', 'main.rs')
+        wait_for('document.querySelectorAll("#quick-results button").length === 1')
+        input_text('#quick-input', '\ue007')
+        wait_for('document.querySelector("#editor-title").textContent === "main.rs"')
+        assert execute('return document.querySelectorAll(".editor-tab.temporary").length') == 0
+        click('button[aria-label="Close main.rs"]')
+        click('#commands')
+        wait_for('document.querySelectorAll("#quick-results button").length > 0')
+        input_text('#quick-input', 'Toggle explorer')
+        input_text('#quick-input', '\ue007')
+        assert execute('return document.querySelector("#app").classList.contains("explorer-hidden")')
+        click('#toggle-explorer')
+        assert not execute('return document.querySelector("#app").classList.contains("explorer-hidden")')
+        previous_width = execute('return document.querySelector(".file-sidebar").getBoundingClientRect().width')
+        input_text('#explorer-resize', '\ue014')
+        assert execute('return document.querySelector(".file-sidebar").getBoundingClientRect().width') > previous_width
         click('.file-button[title="README.md"]')
         wait_for('document.querySelector(".editor-tab.temporary") !== null')
         click('.file-button[title="example.py"]')
@@ -217,6 +231,13 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert (project / '.env').read_text() == env_content
         Path('/app/artifacts/env-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
         click('[data-page="git"]')
+        assert not execute('return document.querySelector("#editor-page").hidden')
+        assert execute('return document.querySelector("#editor-title").textContent.length > 0')
+        click('#git-refresh')
+        click('#close-tool')
+        assert execute('return document.querySelector("#page-content").hidden')
+        click('[data-page="git"]')
+
         wait_for('document.querySelector("#git-status")?.textContent.includes("main.rs")')
         invoke('git_action', {'projectId': registered['id'], 'action': 'stage'})
         invoke('git_action', {'projectId': registered['id'], 'action': 'commit', 'message': 'test: verify desktop integration'})
@@ -271,6 +292,8 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         click('#back-launcher')
         click('[data-page="settings"]')
         wait_for('document.querySelector(".tool-row") !== null')
+        assert execute('return Array.from(document.querySelectorAll(".tool-row strong"), node => node.textContent)') == ['git', 'docker']
+        assert sorted(tool['name'] for tool in invoke('tools_status')) == ['docker', 'git']
         assert 'Found' in execute('return document.querySelector(".tool-row").textContent')
         click('[data-page="projects"]')
         assert execute('return document.querySelector("#app").dataset.stage === "launcher"')
@@ -278,7 +301,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         screenshot = request('GET', f'/session/{SESSION}/screenshot')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-preview.png').write_bytes(base64.b64decode(screenshot))
-        print('Desktop smoke passed: independent launcher/IDE, workspaces, accounts, editor, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection and tool detection.')
+        print('Desktop smoke passed: independent launcher/IDE, workspaces, editor, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection and tool detection.')
     except Exception:
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-failure.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))

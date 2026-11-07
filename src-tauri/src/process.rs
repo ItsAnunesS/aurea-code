@@ -42,7 +42,7 @@ pub struct ToolStatus {
 }
 #[tauri::command]
 pub fn tools_status() -> Vec<ToolStatus> {
-    ["git", "docker", "codex", "claude"]
+    ["git", "docker"]
         .iter()
         .map(|name| {
             let path = executable(name)

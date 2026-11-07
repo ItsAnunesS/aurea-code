@@ -33,7 +33,7 @@
       "icons/128x128.png",
       "icons/icon.ico"
     ],
-    "shortDescription": "A space for your code and your agents",
+    "shortDescription": "A space for your code and projects",
     "category": "DeveloperTool",
     "createUpdaterArtifacts": false
   },

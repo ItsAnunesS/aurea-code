@@ -1,6 +1,6 @@
 use crate::{
     process::executable,
-    store::{error, id, Provider, Result, Store},
+    store::{error, id, Result, Store},
 };
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
@@ -45,38 +45,11 @@ fn size(rows: u16, cols: u16) -> Result<PtySize> {
         pixel_height: 0,
     })
 }
-// Parent API keys must not silently override the account selected in the workspace.
-pub fn configure_profile(
-    command: &mut CommandBuilder,
-    provider: &Provider,
-    home: &std::path::Path,
-) {
-    for key in [
-        "OPENAI_API_KEY",
-        "CODEX_API_KEY",
-        "CODEX_ACCESS_TOKEN",
-        "ANTHROPIC_API_KEY",
-        "ANTHROPIC_AUTH_TOKEN",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-        "CODEX_SQLITE_HOME",
-    ] {
-        command.env_remove(key);
-    }
-    match provider {
-        Provider::Codex => {
-            command.env("CODEX_HOME", home);
-        }
-        Provider::Claude => {
-            command.env("CLAUDE_CONFIG_DIR", home);
-        }
-    }
-}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalRequest {
     project_id: String,
     kind: String,
-    profile_id: Option<String>,
     rows: u16,
     cols: u16,
 }
@@ -91,7 +64,6 @@ pub fn terminal_start(
     let TerminalRequest {
         project_id,
         kind,
-        profile_id,
         rows,
         cols,
     } = request;
@@ -101,33 +73,6 @@ pub fn terminal_start(
         return Err("Close a terminal before opening another (maximum: 8).".into());
     }
     let mut command = match kind.as_str() {
-        "agent" => {
-            let db = store.snapshot()?;
-            let profile = db
-                .profiles
-                .iter()
-                .find(|p| Some(&p.id) == profile_id.as_ref())
-                .ok_or("Select an account.")?;
-            let workspace = db
-                .workspaces
-                .iter()
-                .find(|w| w.id == project.workspace_id)
-                .ok_or("Workspace not found.")?;
-            if !workspace.profile_ids.contains(&profile.id) {
-                return Err("This account does not belong to the workspace.".into());
-            }
-            let program = match profile.provider {
-                Provider::Codex => "codex",
-                Provider::Claude => "claude",
-            };
-            let mut command = CommandBuilder::new(executable(program)?);
-            configure_profile(
-                &mut command,
-                &profile.provider,
-                &store.profile_home(profile)?,
-            );
-            command
-        }
         "shell" => {
             #[cfg(windows)]
             let shell = executable("powershell")?;
@@ -241,27 +186,6 @@ pub fn terminal_stop(terminals: tauri::State<Terminals>, session_id: String) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn profiles_override_state_paths_and_remove_parent_api_keys() {
-        let directory = tempfile::tempdir().unwrap();
-        for (provider, variable) in [
-            (Provider::Codex, "CODEX_HOME"),
-            (Provider::Claude, "CLAUDE_CONFIG_DIR"),
-        ] {
-            let mut command = CommandBuilder::new("unused");
-            command.env("OPENAI_API_KEY", "test-value");
-            command.env("ANTHROPIC_API_KEY", "test-value");
-            command.env("CLAUDE_CODE_OAUTH_TOKEN", "test-value");
-            configure_profile(&mut command, &provider, directory.path());
-            assert_eq!(
-                command.get_env(variable),
-                Some(directory.path().as_os_str())
-            );
-            assert!(command.get_env("OPENAI_API_KEY").is_none());
-            assert!(command.get_env("ANTHROPIC_API_KEY").is_none());
-            assert!(command.get_env("CLAUDE_CODE_OAUTH_TOKEN").is_none());
-        }
-    }
     #[test]
     fn validates_terminal_dimensions() {
         assert!(size(0, 80).is_err());
