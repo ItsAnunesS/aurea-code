@@ -85,6 +85,16 @@ pub fn run(program: &str, args: &[&OsStr], directory: &Path) -> Result<String> {
         .stderr(Stdio::piped())
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_PAGER", "cat");
+    if program == "git" {
+        for key in [
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_COMMON_DIR",
+        ] {
+            command.env_remove(key);
+        }
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -154,6 +164,7 @@ pub async fn git_action(
     let project = store.project(&project_id)?;
     let args = git_args(&action, message.as_deref().unwrap_or(""))?;
     tauri::async_runtime::spawn_blocking(move || {
+        require_repository_root(&project.path)?;
         run(
             "git",
             &args.iter().map(OsStr::new).collect::<Vec<_>>(),
@@ -185,24 +196,20 @@ pub fn docker_args(action: &str, container: &str) -> Result<Vec<String>> {
     };
     Ok(args.iter().map(|s| s.to_string()).collect())
 }
-#[tauri::command]
-pub async fn docker_action(
-    store: tauri::State<'_, Store>,
-    action: String,
-    container: Option<String>,
-) -> Result<String> {
-    let directory = store.directory.clone();
-    let args = docker_args(&action, container.as_deref().unwrap_or(""))?;
-    tauri::async_runtime::spawn_blocking(move || {
-        run(
-            "docker",
-            &args.iter().map(OsStr::new).collect::<Vec<_>>(),
-            &directory,
-        )
-    })
-    .await
-    .map_err(error)?
+pub fn require_repository_root(directory: &Path) -> Result<()> {
+    let root = run(
+        "git",
+        &[OsStr::new("rev-parse"), OsStr::new("--show-toplevel")],
+        directory,
+    )?;
+    if Path::new(root.trim()).canonicalize().map_err(error)?
+        != directory.canonicalize().map_err(error)?
+    {
+        return Err("Abra a raiz do repositório como projeto para usar o Git integrado.".into());
+    }
+    Ok(())
 }
+
 #[tauri::command]
 pub fn reveal_project(
     app: tauri::AppHandle,
@@ -241,6 +248,10 @@ mod tests {
         }
         let dir = tempfile::tempdir().unwrap();
         run("git", &[OsStr::new("init")], dir.path()).unwrap();
+        require_repository_root(dir.path()).unwrap();
+        let nested = dir.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        assert!(require_repository_root(&nested).is_err());
         std::fs::write(dir.path().join("hello.txt"), "hello").unwrap();
         let args = git_args("stage", "").unwrap();
         run(

@@ -137,7 +137,7 @@ pub fn terminal_start(
         }
         "compose" => {
             let mut command = CommandBuilder::new(executable("docker")?);
-            command.args(["compose", "up", "--build"]);
+            command.args(crate::docker::compose_args(&project.path)?);
             command
         }
         _ => return Err("Tipo de terminal inválido.".into()),

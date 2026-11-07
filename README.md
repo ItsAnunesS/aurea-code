@@ -4,12 +4,13 @@ IDE desktop minimalista em **Rust + Tauri 2**, com interface TypeScript, CodeMir
 
 ## Funcionalidades
 
+- Arranque em três etapas: verificação de atualizações, launcher de projetos e IDE dedicada ao projeto aberto. Sem plugins nem marketplace.
 - Workspaces persistentes com múltiplos projetos locais e perfis Codex/Claude.
 - Explorador, criação de ficheiros e editor com destaque de sintaxe para JS/TS, JSON e Rust, pesquisa e undo/redo. Outros ficheiros UTF-8 abrem como texto.
 - Sincronização do ficheiro aberto com o disco a cada 3 segundos e ao recuperar o foco. Alterações externas são carregadas se não houver edições locais; guardar recusa conflitos detetados. Limite de 2 MiB por ficheiro.
 - Terminais PTY reais para shell, Codex, Claude e `docker compose up --build`, até oito sessões. Cada terminal identifica projeto e conta.
-- Git: estado, diff, staging, histórico e commits com os hooks normais do repositório.
-- Docker: containers do contexto ativo, logs, iniciar, parar, reiniciar e Compose no projeto ativo.
+- Git: estado, diff, staging, histórico e commits com os hooks normais do repositório. Abra a raiz do repositório como projeto; subpastas não herdam o Git de um projeto superior.
+- Docker: apenas containers Compose cuja etiqueta `com.docker.compose.project.working_dir` corresponde à pasta do projeto aberto. Cada ação volta a validar a associação no backend. Containers sem esta etiqueta ficam ocultos. Compose exige um ficheiro na raiz do projeto, sem procurar em pastas superiores.
 - Menu nativo, atalhos, seleção nativa de pastas, abertura no gestor de ficheiros, instância única e bandeja do sistema.
 - AppImage com fonte de atualização incorporada para Gear Lever e ficheiro `.zsync`.
 
@@ -35,7 +36,7 @@ docker compose build ui-test
 docker compose run --rm ui-test
 ```
 
-O teste usa um projeto temporário e uma área de dados isolada. Verifica workspaces, perfis, guardar/sincronizar ficheiros, Git e terminal reais; a indisponibilidade de Docker também é exercitada. Guarda uma captura em `artifacts/desktop-preview.png`. Não usa contas reais dos agentes nem o socket Docker do host.
+O teste usa um projeto temporário e uma área de dados isolada. Verifica workspaces, perfis, guardar/sincronizar ficheiros, Git e terminal reais; a indisponibilidade de Docker e a filtragem entre dois projetos com um CLI de teste também são exercitadas. Guarda uma captura em `artifacts/desktop-preview.png`. Não usa contas reais dos agentes nem o socket Docker do host.
 
 Para pré-visualizar apenas a interface: `docker compose up dev` e abrir `http://localhost:1420`. O browser identifica explicitamente este modo e não simula acesso a ficheiros, Git, Docker ou agentes.
 
@@ -50,11 +51,14 @@ Os volumes Docker isolam `node_modules` e o target Rust do host. Não se monta o
 
 ## Primeira utilização
 
-1. Crie um workspace ou use **Pessoal**.
-2. Use **Adicionar projeto** e selecione uma pasta existente (também pode criar uma pasta pelo diálogo do sistema).
-3. Em **Contas de IA**, crie um perfil Codex ou Claude para cada conta. Pode associar o mesmo perfil a vários workspaces.
-4. Abra um projeto, escolha o perfil e clique **Iniciar agente**. Faça o login dentro do CLI oficial. A Aurea não fornece nem contorna subscrições dos fornecedores.
-5. Instale `git`, `docker`, `codex` e/ou `claude` como executáveis nativos acessíveis no `PATH`. **Ambiente** mostra os caminhos encontrados. No Windows, esta versão requer `.exe`, não wrappers `.cmd` de npm. Reinicie a IDE após instalar ferramentas.
+1. Ao iniciar, a aplicação consulta a última release estável do GitHub. Se houver atualização, pode abrir a página de download ou continuar. Sem rede, pode tentar novamente ou continuar offline. A instalação continua a ser gerida pelo Gear Lever no Linux ou pelo instalador no Windows.
+2. No launcher, crie um workspace ou use **Pessoal**.
+3. Use **Abrir pasta** e selecione uma pasta existente (também pode criar uma pasta pelo diálogo do sistema).
+4. Em **Contas de IA**, crie um perfil Codex ou Claude para cada conta. Pode associar o mesmo perfil a vários workspaces.
+5. Abra um projeto, escolha o perfil e clique **Iniciar agente**. Faça o login dentro do CLI oficial. A Aurea não fornece nem contorna subscrições dos fornecedores.
+6. Instale `git`, `docker`, `codex` e/ou `claude` como executáveis nativos acessíveis no `PATH`. **Ambiente** mostra os caminhos encontrados. No Windows, esta versão requer `.exe`, não wrappers `.cmd` de npm. Reinicie a IDE após instalar ferramentas.
+
+A IDE mostra editor, Git, Docker e terminais apenas do projeto aberto. Use **← Projetos** para voltar ao launcher; edições por guardar e terminais ativos exigem confirmação, e as sessões são encerradas antes de mudar de projeto.
 
 O Codex recebe um `CODEX_HOME` por perfil; o Claude recebe um `CLAUDE_CONFIG_DIR` por perfil. As variáveis de autenticação mais comuns herdadas do processo pai são removidas das sessões dos agentes, evitando que uma chave API substitua silenciosamente a conta escolhida. Login, tokens, aprovação de ferramentas e histórico são geridos pelos CLIs oficiais. A mudança de perfil abre uma nova sessão e não altera terminais existentes.
 

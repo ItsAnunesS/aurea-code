@@ -1,3 +1,4 @@
+mod docker;
 mod files;
 mod process;
 mod store;
@@ -31,6 +32,17 @@ fn exit_app(app: tauri::AppHandle) {
 #[tauri::command]
 fn desktop_status(desktop: tauri::State<Desktop>) -> bool {
     desktop.tray_ready.load(Ordering::Relaxed)
+}
+
+#[tauri::command]
+fn open_release(app: tauri::AppHandle) -> store::Result<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(
+            "https://github.com/ItsAnunesS/aurea-code/releases/latest",
+            None::<&str>,
+        )
+        .map_err(store::error)
 }
 
 pub fn run() {
@@ -145,7 +157,8 @@ pub fn run() {
             files::save_file,
             process::tools_status,
             process::git_action,
-            process::docker_action,
+            docker::docker_action,
+            open_release,
             process::reveal_project,
             terminal::terminal_start,
             terminal::terminal_write,

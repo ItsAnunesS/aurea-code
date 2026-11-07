@@ -76,6 +76,10 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
     SESSION = result['sessionId']
     try:
         wait_for('document.querySelector("#workspace-select option") !== null')
+        if execute('return document.querySelector("#app").dataset.stage === "updater"'):
+            click('#update-continue')
+        wait_for('document.querySelector("#app").dataset.stage === "launcher"')
+        assert execute('return document.querySelector("#ide-navigation").hidden')
         assert execute('return document.querySelector("#preview-banner").hidden')
         click('#new-workspace')
         input_text('#modal input[name="title"]', 'Workspace de teste')
@@ -92,11 +96,19 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert len(workspace['profile_ids']) == 1
         database = invoke('add_project', {'workspaceId': workspace['id'], 'path': directory})
         registered = database['projects'][-1]
+        second_path = project / 'another-project'
+        second_path.mkdir()
+        (second_path / 'second.txt').write_text('Second project')
+        second_database = invoke('add_project', {'workspaceId': workspace['id'], 'path': str(second_path)})
+        second_registered = second_database['projects'][-1]
         request('POST', f'/session/{SESSION}/refresh', {})
+        wait_for('!document.querySelector("#update-continue").disabled')
+        if execute('return document.querySelector("#app").dataset.stage === "updater"'):
+            click('#update-continue')
         wait_for('document.querySelector(".project-card") !== null')
         click('.project-title')
         wait_for('document.querySelector(".file-button") !== null')
-        click('.file-button')
+        click('.file-button[title="main.rs"]')
         wait_for('document.querySelector(".cm-content") !== null')
         assert 'Hello Aurea' in execute('return document.querySelector(".cm-content").textContent')
         input_text('.cm-content', '// edited\n')
@@ -106,13 +118,15 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert '// edited' in (project / 'main.rs').read_text()
         (project / 'main.rs').write_text('// external synchronization\n')
         wait_for('document.querySelector(".cm-content").textContent.includes("external synchronization")')
-        click('#project-git')
+        Path('/app/artifacts').mkdir(exist_ok=True)
+        Path('/app/artifacts/editor-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        click('[data-page="git"]')
         wait_for('document.querySelector("#git-status")?.textContent.includes("main.rs")')
         invoke('git_action', {'projectId': registered['id'], 'action': 'stage'})
         invoke('git_action', {'projectId': registered['id'], 'action': 'commit', 'message': 'test: verify desktop integration'})
         log = invoke('git_action', {'projectId': registered['id'], 'action': 'log'})
         assert 'test: verify desktop integration' in log
-        click('[data-page="projects"]')
+        click('#back-launcher')
         click('.project-title')
         wait_for('document.querySelector("#start-shell")?.offsetParent !== null')
         click('#start-shell')
@@ -121,16 +135,53 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#terminal-panel").textContent.includes("aurea-terminal-smoke")')
         click('[data-page="docker"]')
         wait_for('document.querySelector("#docker-list").textContent.includes("Docker indisponível")')
+        # A fixture CLI exercises native Docker routing without granting access to the host daemon.
+        docker_fixture = Path('/usr/local/bin/docker')
+        assert not docker_fixture.exists(), 'UI test requires an isolated image without Docker'
+        docker_fixture.write_text('#!/usr/bin/env python3\nimport sys,json\n'
+            + 'roots = ' + repr({'a' * 64: directory, 'b' * 64: str(second_path)}) + '\n'
+            + "if sys.argv[1] == 'ps': print('\\n'.join(roots))\n"
+            + "elif sys.argv[1] == 'inspect':\n"
+            + " key = sys.argv[-1]; print(json.dumps({'ID':key,'Names':'container-'+key[0],'Image':'test-image','State':'running','Status':'running','Ports':'','labels':{'com.docker.compose.project.working_dir':roots[key]}}))\n"
+            + "elif sys.argv[1] == 'logs': print('project logs')\n"
+            + "else: raise SystemExit('Unexpected mutation')\n")
+        docker_fixture.chmod(0o755)
+        click('#docker-refresh')
+        wait_for('document.querySelector(".container-row") !== null')
+        assert 'container-a' in execute('return document.querySelector("#docker-list").textContent')
+        assert 'container-b' not in execute('return document.querySelector("#docker-list").textContent')
+        click('[data-docker-action="logs"]')
+        wait_for('document.querySelector("#docker-output").textContent.includes("project logs")')
+        try:
+            invoke('docker_action', {'projectId': registered['id'], 'action': 'stop', 'container': 'b' * 64})
+            raise AssertionError('Foreign Docker action was accepted')
+        except AssertionError as error:
+            assert 'não pertence' in str(error), str(error)
+        input_text('.xterm-helper-textarea', 'exit\n')
+        wait_for('document.querySelector(".terminal-tab").textContent.includes("encerrado")')
+        Path('/app/artifacts').mkdir(exist_ok=True)
+        Path('/app/artifacts/ide-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        click('#back-launcher')
+        assert execute('return document.querySelector(".terminal-tab") === null')
+        click('.project-title[data-project="' + second_registered['id'] + '"]')
+        wait_for('document.querySelector(".file-button")?.title === "second.txt"')
+        assert execute('return document.querySelector(".terminal-tab") === null')
+        click('[data-page="docker"]')
+        wait_for('document.querySelector("#docker-list").textContent.includes("container-b")')
+        assert 'container-a' not in execute('return document.querySelector("#docker-list").textContent')
+        click('[data-page="git"]')
+        wait_for('document.querySelector("#git-status").textContent.includes("Abra a raiz")')
+        click('#back-launcher')
         click('[data-page="settings"]')
         wait_for('document.querySelector(".tool-row") !== null')
         assert 'Encontrado' in execute('return document.querySelector(".tool-row").textContent')
         click('[data-page="projects"]')
-        click('#hide-terminal')
+        assert execute('return document.querySelector("#app").dataset.stage === "launcher"')
         time.sleep(.4)
         screenshot = request('GET', f'/session/{SESSION}/screenshot')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-preview.png').write_bytes(base64.b64decode(screenshot))
-        print('Desktop smoke passed: workspace, account, project, editor save/sync, real Git commit, real PTY, unavailable Docker and tool detection.')
+        print('Desktop smoke passed: updater/launcher/IDE, workspaces, accounts, editor, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection and tool detection.')
     except Exception:
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-failure.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
@@ -138,3 +189,5 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         raise
     finally:
         request('DELETE', f'/session/{SESSION}')
+        if 'docker_fixture' in locals():
+            docker_fixture.unlink(missing_ok=True)

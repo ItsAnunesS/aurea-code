@@ -10,6 +10,12 @@ export class TerminalManager {
   sessions: Session[] = [];
   private selected?: Session;
   private opening = false;
+  private closing = false;
+  private projectId?: string;
+  activate(projectId: string) {
+    if (this.projectId !== projectId && this.sessions.length) throw new Error('Encerre os terminais antes de mudar de projeto.');
+    this.projectId = projectId;
+  }
   constructor(private panel: HTMLElement, private tabs: HTMLElement, private host: HTMLElement, private report: (message: string) => void) {}
   get running() { return this.sessions.filter(s => !s.exited).length; }
   hide() { this.panel.hidden = true; }
@@ -20,6 +26,7 @@ export class TerminalManager {
     requestAnimationFrame(() => { session.fit.fit(); session.terminal.focus(); });
   }
   async start(project: Project, kind: 'shell' | 'agent' | 'compose', profile?: Profile) {
+    if (this.closing || project.id !== this.projectId) throw new Error('O projeto já não está ativo.');
     if (this.opening) return;
     if (this.sessions.length >= 8) throw new Error('Feche um terminal antes de abrir outro (máximo: 8).');
     this.opening = true;
@@ -44,6 +51,17 @@ export class TerminalManager {
     try { fit.fit(); session.id = await invoke<string>('terminal_start', { request: { projectId: project.id, kind, profileId: profile?.id ?? null, rows: Math.max(2, terminal.rows), cols: Math.max(2, terminal.cols) }, onEvent: channel }); }
     catch (error) { this.dispose(session); throw error; }
     finally { this.opening = false; }
+  }
+  async closeAll() {
+    if (this.opening) throw new Error('Aguarde o terminal iniciar antes de fechar o projeto.');
+    this.closing = true;
+    try {
+      for (const session of [...this.sessions]) {
+        if (session.id && !session.exited) await invoke('terminal_stop', { sessionId: session.id });
+        this.dispose(session);
+      }
+      this.projectId = undefined;
+    } finally { this.closing = false; }
   }
   async closeSelected() {
     const session = this.selected; if (!session) return;

@@ -1,3 +1,5 @@
+import { getVersion } from '@tauri-apps/api/app';
+import { checkRelease } from './updates.mjs';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open, confirm } from '@tauri-apps/plugin-dialog';
@@ -25,6 +27,7 @@ function icon(name: string) { return `<svg viewBox="0 0 24 24" aria-hidden="true
 function element<T extends HTMLElement>(selector: string) { const node = document.querySelector<T>(selector); if (!node) throw new Error(`Elemento ausente: ${selector}`); return node; }
 const app = element<HTMLDivElement>('#app');
 app.innerHTML = `
+  <section id="startup-view"><div class="startup-card"><span class="brand-mark">Λ</span><h1>Aurea Code</h1><p id="update-status">A verificar atualizações…</p><div class="button-row"><button id="update-release" class="primary-button" hidden>Ver atualização</button><button id="update-retry" class="small-button" hidden>Tentar novamente</button><button id="update-continue" class="small-button" disabled>Continuar</button></div><p class="muted small">Atualizações pelo GitHub · AppImage integrado com Gear Lever</p></div></section>
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">Λ</span><span>Aurea<span class="brand-light"> Code</span></span><span class="version">MVP</span></div>
     <div class="workspace-label">WORKSPACE <button id="new-workspace" class="icon-button" title="Novo workspace" aria-label="Novo workspace">+</button></div>
@@ -32,14 +35,14 @@ app.innerHTML = `
     <nav aria-label="Navegação principal">
       <button data-page="projects">${icon('projects')} Projetos <span id="project-count" class="count">0</span></button>
       <button data-page="accounts">${icon('accounts')} Contas de IA</button>
-      <div class="nav-label">FERRAMENTAS</div>
-      <button data-page="git">${icon('git')} Controlo de versão</button>
-      <button data-page="docker">${icon('docker')} Docker</button>
+
     </nav>
     <div class="sidebar-projects"><div class="nav-label">NESTE WORKSPACE</div><div id="project-shortcuts"></div></div>
     <div class="sidebar-bottom"><button data-page="settings">${icon('settings')} Ambiente</button><div class="local-indicator"><span class="dot"></span> Local, por natureza <span>↗</span></div></div>
   </aside>
   <div class="main-shell">
+    <header id="ide-header" hidden><button id="back-launcher" class="small-button">← Projetos</button><div><strong id="ide-project-name"></strong><small id="ide-project-path"></small></div><div id="ide-agents"></div></header>
+    <nav id="ide-navigation" hidden aria-label="Ferramentas do projeto"><button data-page="editor">${icon('code')} Editor</button><button data-page="git">${icon('git')} Git</button><button data-page="docker">${icon('docker')} Docker</button><button id="ide-reveal">${icon('folder')} Pasta</button></nav>
     <header class="topbar"><div class="breadcrumb"><span id="workspace-name">Pessoal</span><span>/</span><strong id="page-name">Projetos</strong></div><div class="top-actions"><span class="shortcut">Ctrl + O</span><button id="open-top" class="small-button">${icon('folder')} Abrir projeto</button></div></header>
     <div id="preview-banner" hidden>Pré-visualização da interface. Abra a aplicação desktop para usar ficheiros, contas, Git e Docker.</div>
     <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>EXPLORADOR</span><button id="new-file" class="icon-button" title="Novo ficheiro" aria-label="Novo ficheiro">+</button><button id="refresh-files" class="icon-button" title="Atualizar ficheiros">↻</button></div><div id="file-tree"></div></aside><div class="editor-area"><div class="editor-toolbar"><span id="editor-title">Selecione um ficheiro</span><div><button id="reload-file" class="small-button">Reabrir</button><button id="save-file" class="small-button">Guardar</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Espaço para criar.</h2><p>Abra um ficheiro no explorador ou inicie um agente.</p></div><div id="code-editor"></div></div></section></main>
@@ -52,6 +55,10 @@ let tools: ToolStatus[] = [];
 let workspaceId = localStorage.getItem('aurea.workspace') ?? '';
 let projectId = '';
 let page: Page = 'projects';
+let stage: 'updater' | 'launcher' | 'ide' = 'updater';
+let updateController: AbortController | undefined;
+let updateRevision = 0;
+app.dataset.stage = stage;
 let pageRevision = 0;
 let toastTimer = 0;
 let trayReady = false;
@@ -80,13 +87,23 @@ function refreshSidebar() {
   document.querySelectorAll('[data-page]').forEach(node => node.classList.toggle('active', (node as HTMLElement).dataset.page === (page === 'editor' ? 'projects' : page)));
 }
 async function navigate(next: Page) {
-  if (next === 'git' && !projectId) { notify('Abra um projeto para consultar o Git.'); return; }
+  if (['editor', 'git', 'docker'].includes(next) && !projectId) { notify('Abra um projeto para consultar o Git.'); return; }
+  if (['projects', 'accounts', 'settings'].includes(next) && projectId) {
+    if (!await canDiscard()) return;
+    if (terminals.running && !await confirmAction('Voltar ao launcher vai encerrar os terminais deste projeto. Continuar?')) return;
+    await terminals.closeAll(); editor.close(); projectId = ''; treeRevision++;
+  }
+  stage = projectId ? 'ide' : 'launcher'; app.dataset.stage = stage;
+  element('#startup-view').hidden = true;
+  element('#ide-header').hidden = stage !== 'ide'; element('#ide-navigation').hidden = stage !== 'ide';
+  if (stage === 'ide') { element('#ide-project-name').textContent = project().name; element('#ide-project-path').textContent = project().path; }
   page = next; pageRevision++; refreshSidebar();
     const names = { projects: 'Projetos', editor: projectId ? project().name : 'Editor', accounts: 'Contas de IA', git: 'Controlo de versão', docker: 'Docker', settings: 'Ambiente' };
     element('#page-name').textContent = names[page];
     element('#editor-page').hidden = page !== 'editor'; content.hidden = page === 'editor';
     document.querySelector('.editor-agent-bar')?.remove();
-    if (page === 'editor') { content.replaceChildren(); renderEditorActions(); }
+    if (stage === 'ide') renderEditorActions();
+    if (page === 'editor') content.replaceChildren();
     if (page === 'projects') renderProjects();
     else if (page === 'accounts') renderAccounts();
     else if (page === 'git') await renderGit();
@@ -102,29 +119,30 @@ function wireAgents() {
 }
 function renderProjects() {
   const list = projects();
-  content.innerHTML = heading('O SEU ESPAÇO DE TRABALHO', 'Boas ideias começam aqui.', 'Projetos organizados. Agentes ao seu lado. Espaço para se concentrar.', `<button id="add-project" class="primary-button">${icon('plus')} Adicionar projeto</button>`) + `
-    <div class="overview"><div><span class="overview-icon">${icon('folder')}</span><span><strong>${list.length}</strong><small>Projetos locais</small></span></div><div><span class="overview-icon">${icon('accounts')}</span><span><strong>${profiles().length}</strong><small>Contas neste workspace</small></span></div><div><span class="overview-icon">${icon('terminal')}</span><span><strong>${terminals.running}</strong><small>Terminais em execução</small></span></div><div class="workspace-note"><span class="dot"></span> No seu computador</div></div>
-    <div class="list-heading"><h2>Os seus projetos <span class="muted">${list.length ? ` / ${list.length}` : ''}</span></h2><label class="search-field">${icon('search')}<input id="project-search" placeholder="Procurar projeto…" aria-label="Procurar projeto"></label></div>
-    <div id="project-grid" class="project-grid">${list.map(p => `<article class="project-card" data-card-name="${html(p.name.toLowerCase())}"><div class="card-top"><span class="folder-tile">${icon('folder')}</span><span class="badge">Local</span></div><button class="project-title" data-project="${html(p.id)}">${html(p.name)}</button><p class="project-path" title="${html(p.path)}">${html(p.path)}</p><div class="card-bottom"><span>${icon('code')} Pronto para abrir</span><button data-project="${html(p.id)}" class="icon-button" aria-label="Abrir ${html(p.name)}">${icon('arrow')}</button></div></article>`).join('')}
-    <button id="add-project-card" class="add-project-card">${icon('plus')}<strong>${list.length ? 'Mais um projeto' : 'O seu primeiro projeto'}</strong><span>Abra uma pasta do computador</span></button></div>
-    ${projectId ? `<div class="active-project-strip"><div><span class="eyebrow">PROJETO ATIVO</span><strong>${html(project().name)}</strong></div>${agentControls()}</div>` : ''}
-    <div class="getting-started"><div class="spark">✳</div><div><h3>O seu código. A sua forma de trabalhar.</h3><p>Associe contas Codex e Claude ao workspace e inicie os agentes diretamente nos seus projetos.</p></div><button id="configure-accounts" class="text-button">Configurar contas ${icon('arrow')}</button></div>`;
+  content.innerHTML = heading('BEM-VINDO À AUREA CODE', 'Projetos', 'Escolha onde quer continuar a trabalhar.', `<button id="add-project" class="primary-button">${icon('folder')} Abrir pasta</button>`) + `
+    <div class="list-heading"><h2>Neste workspace</h2><label class="search-field">${icon('search')}<input id="project-search" placeholder="Procurar projeto…" aria-label="Procurar projeto"></label></div>
+    <div id="project-grid" class="project-grid">${list.map(p => `<article class="project-card" data-card-name="${html((p.name + ' ' + p.path).toLowerCase())}"><span class="folder-tile">${icon('folder')}</span><div><button class="project-title" data-project="${html(p.id)}">${html(p.name)}</button><p class="project-path" title="${html(p.path)}">${html(p.path)}</p></div><button data-project="${html(p.id)}" class="small-button">Abrir ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><h2>O seu próximo projeto começa aqui.</h2><p>Abra uma pasta do computador para entrar na IDE.</p></div>'}</div>
+    <div class="getting-started"><div><h3>Codex e Claude, com as suas contas.</h3><p>Organize os perfis deste workspace antes de abrir um projeto.</p></div><button id="configure-accounts" class="text-button">Gerir contas ${icon('arrow')}</button></div>`;
   bind('#add-project, #add-project-card', addProject); bind('[data-project]', b => openProject(b.dataset.project!)); bind('#configure-accounts', () => navigate('accounts')); wireAgents();
   element<HTMLInputElement>('#project-search').oninput = event => { const query = (event.target as HTMLInputElement).value.toLowerCase(); document.querySelectorAll<HTMLElement>('[data-card-name]').forEach(card => { card.hidden = !card.dataset.cardName!.includes(query); }); };
 }
 async function addProject() {
-  desktop(); const path = await open({ directory: true, multiple: false, title: 'Selecione ou crie a pasta do projeto' }); if (!path) return;
+  desktop(); if (projectId) { await navigate('projects'); if (projectId) return; }
+  const path = await open({ directory: true, multiple: false, title: 'Selecione ou crie a pasta do projeto' }); if (!path) return;
   db = await invoke<Database>('add_project', { workspaceId, path }); const added = db.projects.find(p => p.path === path && p.workspace_id === workspaceId) ?? db.projects.at(-1)!; await openProject(added.id);
 }
 async function openProject(id: string) {
   desktop(); if (id !== projectId && !await canDiscard()) return;
+  if (id !== projectId && projectId) { await navigate('projects'); if (projectId) return; }
+  terminals.activate(id);
   if (id !== projectId) editor.close(); projectId = id;
   await navigate('editor'); await renderTree();
 }
 function renderEditorActions() {
-  const bar = document.createElement('div'); bar.className = 'editor-agent-bar'; bar.innerHTML = `<button id="project-git" class="small-button">${icon('git')} Git</button><button id="reveal-project" class="small-button">${icon('folder')} Pasta</button>${agentControls()}`;
-  document.querySelector('.editor-agent-bar')?.remove(); element('.editor-area').append(bar);
-  bind('#project-git', () => navigate('git')); bind('#reveal-project', () => invoke('reveal_project', { projectId })); wireAgents();
+  const selected = document.querySelector<HTMLSelectElement>('#agent-profile')?.value;
+  element('#ide-agents').innerHTML = agentControls();
+  if (selected && profiles().some(profile => profile.id === selected)) element<HTMLSelectElement>('#agent-profile').value = selected;
+  wireAgents();
 }
 async function renderTree() {
   const revision = ++treeRevision; const id = projectId; const tree = element('#file-tree'); tree.replaceChildren();
@@ -160,9 +178,9 @@ function formDialog(title: string, fields: string, submit: (data: FormData) => P
 }
 function newWorkspace() { desktop(); formDialog('Novo workspace', '<label>Nome<input name="title" placeholder="Ex.: Trabalho" maxlength="80" required autocomplete="off"></label><p class="muted">Agrupe projetos e escolha as contas de IA que pretende usar.</p>', async data => { if (!await canDiscard()) return; db = await invoke('create_workspace', { title: data.get('title') }); workspaceId = db.workspaces.at(-1)!.id; projectId = ''; editor.close(); await navigate('projects'); }); }
 function renderAccounts() {
-  content.innerHTML = heading('CODEX & CLAUDE', 'Cada conta no seu espaço.', 'Perfis locais com configurações e sessões separadas, associados a este workspace.', `<button id="new-profile" class="primary-button">${icon('plus')} Nova conta</button>`) + `<div class="account-grid">${profiles().map(p => `<article class="account-card"><div class="provider-mark ${p.provider}">${p.provider === 'codex' ? '✳' : '✴'}</div><h2>${html(p.name)}</h2><p>${p.provider === 'codex' ? 'OpenAI Codex' : 'Claude Code'}</p><span class="badge">Perfil local</span><p class="account-help">O login e a identidade ativa são apresentados pelo CLI oficial ao abrir o agente.</p><button class="small-button" data-connect="${html(p.id)}">Abrir agente / iniciar sessão ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><span class="empty-icon">✳</span><h2>Traga os seus agentes.</h2><p>Crie um perfil para cada conta pessoal ou profissional.<br>As credenciais são geridas pelos CLIs oficiais.</p></div>'}</div><div class="info-box"><h3>Como funciona</h3><p>Crie um perfil, abra um projeto e inicie o agente. Conclua o login no terminal oficial. Para trocar de conta, abra uma nova sessão com outro perfil; as sessões já abertas mantêm a conta original.</p><p>Os perfis separam configurações. Os processos continuam a ter as permissões do seu utilizador no sistema operativo.</p></div>${db.profiles.some(p => !workspace().profile_ids.includes(p.id)) ? `<div class="link-profile"><h3>Usar uma conta de outro workspace</h3><select id="existing-profile" aria-label="Conta existente">${db.profiles.filter(p => !workspace().profile_ids.includes(p.id)).map(p => `<option value="${html(p.id)}">${html(p.name)} · ${html(p.provider)}</option>`).join('')}</select><button id="link-profile" class="small-button">Associar conta</button></div>` : ''}`;
+  content.innerHTML = heading('CODEX & CLAUDE', 'Cada conta no seu espaço.', 'Perfis locais com configurações e sessões separadas, associados a este workspace.', `<button id="new-profile" class="primary-button">${icon('plus')} Nova conta</button>`) + `<div class="account-grid">${profiles().map(p => `<article class="account-card"><div class="provider-mark ${p.provider}">${p.provider === 'codex' ? '✳' : '✴'}</div><h2>${html(p.name)}</h2><p>${p.provider === 'codex' ? 'OpenAI Codex' : 'Claude Code'}</p><span class="badge">Perfil local</span><p class="account-help">O login e a identidade ativa são apresentados pelo CLI oficial ao abrir o agente.</p><button class="small-button" data-connect="${html(p.id)}">Escolher projeto ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><span class="empty-icon">✳</span><h2>Traga os seus agentes.</h2><p>Crie um perfil para cada conta pessoal ou profissional.<br>As credenciais são geridas pelos CLIs oficiais.</p></div>'}</div><div class="info-box"><h3>Como funciona</h3><p>Crie um perfil, abra um projeto e inicie o agente. Conclua o login no terminal oficial. Para trocar de conta, abra uma nova sessão com outro perfil; as sessões já abertas mantêm a conta original.</p><p>Os perfis separam configurações. Os processos continuam a ter as permissões do seu utilizador no sistema operativo.</p></div>${db.profiles.some(p => !workspace().profile_ids.includes(p.id)) ? `<div class="link-profile"><h3>Usar uma conta de outro workspace</h3><select id="existing-profile" aria-label="Conta existente">${db.profiles.filter(p => !workspace().profile_ids.includes(p.id)).map(p => `<option value="${html(p.id)}">${html(p.name)} · ${html(p.provider)}</option>`).join('')}</select><button id="link-profile" class="small-button">Associar conta</button></div>` : ''}`;
   bind('#new-profile', () => { desktop(); formDialog('Nova conta de IA', '<label>Nome do perfil<input name="title" placeholder="Ex.: Codex pessoal" maxlength="80" required></label><label>Agente<select name="provider"><option value="codex">OpenAI Codex</option><option value="claude">Claude Code</option></select></label>', async data => { db = await invoke('create_profile', { workspaceId, title: data.get('title'), provider: data.get('provider') }); refreshSidebar(); renderAccounts(); }); });
-  bind('[data-connect]', async b => { desktop(); await terminals.start(project(), 'agent', profiles().find(p => p.id === b.dataset.connect)); });
+  bind('[data-connect]', () => { notify('Abra um projeto e selecione esta conta no topo da IDE para iniciar sessão.'); return navigate('projects'); });
   bind('#link-profile', async () => { db = await invoke('link_profile', { workspaceId, profileId: element<HTMLSelectElement>('#existing-profile').value }); renderAccounts(); });
 }
 async function renderGit() {
@@ -171,21 +189,22 @@ async function renderGit() {
   async function load(action: string) { desktop(); return invoke<string>('git_action', { projectId: current.id, action }); }
   bind('#git-refresh', renderGit);
   bind('[data-git-view]', async b => { const output = await load(b.dataset.gitView!); if (revision !== pageRevision) return; element('#git-output').textContent = output || 'Sem alterações.'; document.querySelectorAll('[data-git-view]').forEach(n => n.classList.toggle('active', n === b)); });
-  bind('#git-stage, #git-unstage', async b => { if (!await confirmAction(b.id === 'git-stage' ? 'Adicionar todas as alterações deste projeto ao staging? Reveja o diff antes de criar o commit.' : 'Retirar as alterações do staging, mantendo os ficheiros no disco?')) return; await load(b.id === 'git-stage' ? 'stage' : 'unstage'); if (page === 'git') await renderGit(); });
-  bind('#git-commit', async () => { const message = element<HTMLTextAreaElement>('#commit-message').value.trim(); if (!message) throw new Error('Escreva uma mensagem de commit.'); await invoke('git_action', { projectId: current.id, action: 'commit', message }); notify('Commit criado.'); if (page === 'git') await renderGit(); });
+  bind('#git-stage, #git-unstage', async b => { if (!await confirmAction(b.id === 'git-stage' ? 'Adicionar todas as alterações deste projeto ao staging? Reveja o diff antes de criar o commit.' : 'Retirar as alterações do staging, mantendo os ficheiros no disco?')) return; await load(b.id === 'git-stage' ? 'stage' : 'unstage'); if (revision === pageRevision) await renderGit(); });
+  bind('#git-commit', async () => { const message = element<HTMLTextAreaElement>('#commit-message').value.trim(); if (!message) throw new Error('Escreva uma mensagem de commit.'); await invoke('git_action', { projectId: current.id, action: 'commit', message }); notify('Commit criado.'); if (revision === pageRevision) await renderGit(); });
   try { const [status, diff] = await Promise.all([load('status'), load('diff')]); if (revision !== pageRevision) return; element('#git-status').textContent = status || 'Sem alterações.'; element('#git-output').textContent = diff || 'Sem alterações fora do staging.'; }
   catch (error) { if (revision === pageRevision) { element('#git-status').textContent = String(error); element('#git-output').textContent = 'Abra um projeto com um repositório Git inicializado.'; } }
 }
 async function renderDocker() {
+  const current = project();
   const revision = pageRevision;
-  content.innerHTML = heading('AMBIENTE DE DESENVOLVIMENTO', 'Docker, por perto.', 'Containers do contexto Docker ativo no seu computador.', `<div class="button-row"><button id="compose-up" class="small-button">Compose up + build</button><button id="docker-refresh" class="primary-button">↻ Atualizar</button></div>`) + '<div id="docker-list" class="container-list"><p class="muted">A consultar o Docker…</p></div><pre id="docker-output" class="output" hidden></pre>';
+  content.innerHTML = heading('AMBIENTE DE DESENVOLVIMENTO', html(current.name), 'Containers Docker Compose associados à pasta deste projeto.', `<div class="button-row"><button id="compose-up" class="small-button">Compose up + build</button><button id="docker-refresh" class="primary-button">↻ Atualizar</button></div>`) + '<div id="docker-list" class="container-list"><p class="muted">A consultar o Docker…</p></div><pre id="docker-output" class="output" hidden></pre>';
   bind('#docker-refresh', renderDocker);
   bind('#compose-up', async () => { desktop(); const current = project(); if (!await confirmAction(`Construir imagens e iniciar os serviços do Compose em ${current.name}? O ficheiro Compose deste projeto será executado.`)) return; await terminals.start(current, 'compose'); });
   try {
-    desktop(); const output = await invoke<string>('docker_action', { action: 'list' }); if (revision !== pageRevision) return;
+    desktop(); const output = await invoke<string>('docker_action', { projectId: current.id, action: 'list' }); if (revision !== pageRevision) return;
     const containers = parseContainers(output);
-    element('#docker-list').innerHTML = containers.map(c => `<article class="container-row"><span class="container-icon">${icon('docker')}</span><div class="container-name"><h3>${html(c.name)}</h3><p>${html(c.image)}</p><small>${html(c.ports)}</small></div><span class="badge ${c.state === 'running' ? 'running' : ''}">${html(c.status)}</span><div class="button-row"><button class="small-button" data-container="${html(c.id)}" data-docker-action="logs">Logs</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="${c.state === 'running' ? 'stop' : 'start'}">${c.state === 'running' ? 'Parar' : 'Iniciar'}</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="restart">Reiniciar</button></div></article>`).join('') || '<div class="empty-state"><h2>Nenhum container por aqui.</h2><p>Abra um projeto com Compose para iniciar os seus serviços.</p></div>';
-    bind('[data-docker-action]', async b => { const action = b.dataset.dockerAction!; if (action !== 'logs' && !await confirmAction(`Executar “${action}” no container ${b.dataset.container!.slice(0, 12)} do contexto Docker ativo?`)) return; const result = await invoke<string>('docker_action', { action, container: b.dataset.container }); if (page !== 'docker') return; if (action === 'logs') { element('#docker-output').hidden = false; element('#docker-output').textContent = result || 'Sem logs.'; } else await renderDocker(); });
+    element('#docker-list').innerHTML = containers.map(c => `<article class="container-row"><span class="container-icon">${icon('docker')}</span><div class="container-name"><h3>${html(c.name)}</h3><p>${html(c.image)}</p><small>${html(c.ports)}</small></div><span class="badge ${c.state === 'running' ? 'running' : ''}">${html(c.status)}</span><div class="button-row"><button class="small-button" data-container="${html(c.id)}" data-docker-action="logs">Logs</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="${c.state === 'running' ? 'stop' : 'start'}">${c.state === 'running' ? 'Parar' : 'Iniciar'}</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="restart">Reiniciar</button></div></article>`).join('') || '<div class="empty-state"><h2>Nenhum container por aqui.</h2><p>Inicie o Compose deste projeto. Containers sem a etiqueta de diretório do Compose não aparecem aqui.</p></div>';
+    bind('[data-docker-action]', async b => { const action = b.dataset.dockerAction!; if (action !== 'logs' && !await confirmAction(`Executar “${action}” no container ${b.dataset.container!.slice(0, 12)} deste projeto?`)) return; const result = await invoke<string>('docker_action', { projectId: current.id, action, container: b.dataset.container }); if (revision !== pageRevision) return; if (action === 'logs') { element('#docker-output').hidden = false; element('#docker-output').textContent = result || 'Sem logs.'; } else await renderDocker(); });
   } catch (error) { if (revision === pageRevision) { element('#docker-list').innerHTML = `<div class="empty-state"><h2>Docker indisponível</h2><p>${html(String(error))}</p><p>Instale o Docker, inicie o daemon e confirme o contexto e as permissões do seu utilizador.</p></div>`; } }
 }
 async function renderSettings() {
@@ -200,23 +219,50 @@ async function quit() {
   await invoke('exit_app');
 }
 bind('[data-page]', b => navigate(b.dataset.page as Page));
+bind('#back-launcher', () => navigate('projects')); bind('#ide-reveal', () => invoke('reveal_project', { projectId }));
 bind('#new-workspace', newWorkspace); bind('#open-top', addProject);
 bind('#new-file', () => { const current = project(); formDialog('Novo ficheiro', '<label>Caminho relativo ao projeto<input name="path" placeholder="Ex.: src/main.rs" required></label><p class="muted">A pasta de destino deve existir. Ficheiros existentes não serão substituídos.</p>', async data => { if (!await canDiscard()) return; const path = String(data.get('path')); await invoke('create_file', { projectId: current.id, relative: path }); await renderTree(); await editor.open(current.id, path); }); });
 bind('#save-file', () => editor.save()); bind('#reload-file', async () => { if (editor.file && await canDiscard()) await editor.open(editor.file.projectId, editor.file.path); }); bind('#refresh-files', renderTree);
 bind('#hide-terminal', () => terminals.hide()); bind('#close-terminal', async () => { if (await confirmAction('Encerrar este terminal? O processo em execução será interrompido.')) await terminals.closeSelected(); });
 bind('#show-terminal', () => { desktop(); if (terminals.sessions.length) terminals.show(); else return terminals.start(project(), 'shell'); });
 element<HTMLSelectElement>('#workspace-select').onchange = event => void perform(async () => { const next = (event.target as HTMLSelectElement).value; if (!await canDiscard()) { refreshSidebar(); return; } workspaceId = next; projectId = ''; editor.close(); await navigate('projects'); });
+async function enterLauncher() {
+  updateRevision++; updateController?.abort(); await navigate('projects');
+}
+async function checkUpdates() {
+  const revision = ++updateRevision; updateController?.abort(); updateController = new AbortController();
+  const controller = updateController;
+  element('#update-status').textContent = 'A verificar atualizações…';
+  element('#update-retry').hidden = true; element('#update-release').hidden = true;
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
+  try {
+    if (!isTauri()) { await enterLauncher(); return; }
+    const current = await getVersion();
+    const release = await checkRelease(current, fetch, controller.signal);
+    if (revision !== updateRevision) return;
+    if (!release.available) { await enterLauncher(); return; }
+    element('#update-status').textContent = `Está disponível ${release.version}. Versão instalada: ${current}.`;
+    element('#update-release').hidden = false;
+  } catch {
+    if (revision !== updateRevision) return;
+    element('#update-status').textContent = 'Não foi possível verificar atualizações. Pode continuar offline.';
+    element('#update-retry').hidden = false;
+  } finally { window.clearTimeout(timeout); }
+}
+bind('#update-continue', enterLauncher); bind('#update-retry', checkUpdates);
+bind('#update-release', () => invoke('open_release'));
 async function boot() {
   if (isTauri()) {
     db = await invoke<Database>('load_workspace'); trayReady = await invoke('desktop_status');
     await listen<string>('native-action', event => void perform(async () => {
       const action = event.payload;
-      if (action === 'open') await addProject(); else if (action === 'workspace') newWorkspace(); else if (action === 'save') await editor.save(); else if (action === 'quit') await quit(); else if (action === 'terminal') await terminals.start(project(), 'shell'); else if (['projects', 'git', 'docker'].includes(action)) await navigate(action as Page);
+      if (stage === 'updater' && action !== 'quit') return;
+      if (action === 'open') await addProject(); else if (action === 'workspace') { await navigate('projects'); if (!projectId) newWorkspace(); } else if (action === 'save') await editor.save(); else if (action === 'quit') await quit(); else if (action === 'terminal') await terminals.start(project(), 'shell'); else if (['projects', 'git', 'docker'].includes(action)) await navigate(action as Page);
     }));
     window.setInterval(() => { if (document.visibilityState === 'visible') void editor.sync(); }, 3000);
     window.addEventListener('focus', () => { void editor.sync(); });
   } else element('#preview-banner').hidden = false;
   element('#status-text').textContent = isTauri() ? 'Ambiente local' : 'Pré-visualização';
-  updateEditorTitle(); await navigate('projects');
+  updateEditorTitle(); refreshSidebar(); element<HTMLButtonElement>('#update-continue').disabled = false; await checkUpdates();
 }
-void boot().catch(error => { content.innerHTML = `<div class="empty-state"><h2>Não foi possível abrir os workspaces.</h2><p>${html(String(error))}</p><p>Os dados existentes não foram substituídos.</p></div>`; });
+void boot().catch(error => { element('#startup-view').hidden = true; app.dataset.stage = 'launcher'; content.innerHTML = `<div class="empty-state"><h2>Não foi possível abrir os workspaces.</h2><p>${html(String(error))}</p><p>Os dados existentes não foram substituídos.</p></div>`; });
