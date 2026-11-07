@@ -57,15 +57,14 @@ pub fn run() {
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             app.manage(store::Store::open(directory).map_err(std::io::Error::other)?);
-            let open = MenuItem::with_id(app, "open", "Abrir projeto…", true, Some("CmdOrCtrl+O"))?;
-            let save =
-                MenuItem::with_id(app, "save", "Guardar ficheiro", true, Some("CmdOrCtrl+S"))?;
-            let quit = MenuItem::with_id(app, "quit", "Sair", true, Some("CmdOrCtrl+Q"))?;
+            let open = MenuItem::with_id(app, "open", "Open project…", true, Some("CmdOrCtrl+O"))?;
+            let save = MenuItem::with_id(app, "save", "Save file", true, Some("CmdOrCtrl+S"))?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, Some("CmdOrCtrl+Q"))?;
             let workspace =
-                MenuItem::with_id(app, "workspace", "Novo workspace…", true, None::<&str>)?;
+                MenuItem::with_id(app, "workspace", "New workspace…", true, None::<&str>)?;
             let file_menu = Submenu::with_items(
                 app,
-                "Ficheiro",
+                "File",
                 true,
                 &[
                     &open,
@@ -77,39 +76,39 @@ pub fn run() {
             )?;
             let edit_menu = Submenu::with_items(
                 app,
-                "Editar",
+                "Edit",
                 true,
                 &[
-                    &PredefinedMenuItem::undo(app, None)?,
-                    &PredefinedMenuItem::redo(app, None)?,
+                    &PredefinedMenuItem::undo(app, Some("Undo"))?,
+                    &PredefinedMenuItem::redo(app, Some("Redo"))?,
                     &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::cut(app, None)?,
-                    &PredefinedMenuItem::copy(app, None)?,
-                    &PredefinedMenuItem::paste(app, None)?,
-                    &PredefinedMenuItem::select_all(app, None)?,
+                    &PredefinedMenuItem::cut(app, Some("Cut"))?,
+                    &PredefinedMenuItem::copy(app, Some("Copy"))?,
+                    &PredefinedMenuItem::paste(app, Some("Paste"))?,
+                    &PredefinedMenuItem::select_all(app, Some("Select All"))?,
                 ],
             )?;
             let projects =
-                MenuItem::with_id(app, "projects", "Projetos", true, Some("CmdOrCtrl+1"))?;
+                MenuItem::with_id(app, "projects", "Projects", true, Some("CmdOrCtrl+1"))?;
             let git = MenuItem::with_id(app, "git", "Git", true, Some("CmdOrCtrl+2"))?;
             let docker = MenuItem::with_id(app, "docker", "Docker", true, Some("CmdOrCtrl+3"))?;
             let terminal =
-                MenuItem::with_id(app, "terminal", "Novo terminal", true, Some("CmdOrCtrl+J"))?;
+                MenuItem::with_id(app, "terminal", "New terminal", true, Some("CmdOrCtrl+J"))?;
             let view_menu =
-                Submenu::with_items(app, "Ver", true, &[&projects, &git, &docker, &terminal])?;
+                Submenu::with_items(app, "View", true, &[&projects, &git, &docker, &terminal])?;
             app.set_menu(Menu::with_items(
                 app,
                 &[&file_menu, &edit_menu, &view_menu],
             )?)?;
             app.on_menu_event(|app, event| action(app, event.id.as_ref()));
-            let tray_show = MenuItem::with_id(app, "show", "Abrir Aurea Code", true, None::<&str>)?;
-            let tray_quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
+            let tray_show = MenuItem::with_id(app, "show", "Open Aurea Code", true, None::<&str>)?;
+            let tray_quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&tray_show, &tray_quit])?;
             let tray = TrayIconBuilder::new()
                 .icon(tauri::image::Image::from_bytes(include_bytes!(
                     "../icons/32x32.png"
                 ))?)
-                .tooltip("Aurea Code — os seus projetos, num só lugar")
+                .tooltip("Aurea Code — your projects in one place")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
@@ -168,7 +167,7 @@ pub fn run() {
             desktop_status
         ])
         .build(tauri::generate_context!())
-        .expect("Não foi possível iniciar a Aurea Code");
+        .expect("Unable to start Aurea Code");
     app.run(|app, event| {
         if let tauri::RunEvent::Exit = event {
             app.state::<terminal::Terminals>().stop_all();

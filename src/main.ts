@@ -24,33 +24,33 @@ const icons: Record<string, string> = {
   check: '<path d="m5 12 4 4L19 6"/>',
 };
 function icon(name: string) { return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] ?? icons.code}</svg>`; }
-function element<T extends HTMLElement>(selector: string) { const node = document.querySelector<T>(selector); if (!node) throw new Error(`Elemento ausente: ${selector}`); return node; }
+function element<T extends HTMLElement>(selector: string) { const node = document.querySelector<T>(selector); if (!node) throw new Error(`Missing element: ${selector}`); return node; }
 const app = element<HTMLDivElement>('#app');
 app.innerHTML = `
-  <section id="startup-view"><div class="startup-card"><span class="brand-mark">Λ</span><h1>Aurea Code</h1><p id="update-status">A verificar atualizações…</p><div class="button-row"><button id="update-release" class="primary-button" hidden>Ver atualização</button><button id="update-retry" class="small-button" hidden>Tentar novamente</button><button id="update-continue" class="small-button" disabled>Continuar</button></div><p class="muted small">Atualizações pelo GitHub · AppImage integrado com Gear Lever</p></div></section>
+  <section id="startup-view"><div class="startup-card"><span class="brand-mark">Λ</span><h1>Aurea Code</h1><p id="update-status">Checking for updates…</p><div class="button-row"><button id="update-release" class="primary-button" hidden>View update</button><button id="update-retry" class="small-button" hidden>Try again</button><button id="update-continue" class="small-button" disabled>Continue</button></div><p class="muted small">Updates from GitHub · AppImage integrated with Gear Lever</p></div></section>
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">Λ</span><span>Aurea<span class="brand-light"> Code</span></span><span class="version">MVP</span></div>
-    <div class="workspace-label">WORKSPACE <button id="new-workspace" class="icon-button" title="Novo workspace" aria-label="Novo workspace">+</button></div>
-    <select id="workspace-select" aria-label="Workspace ativo"></select>
-    <nav aria-label="Navegação principal">
-      <button data-page="projects">${icon('projects')} Projetos <span id="project-count" class="count">0</span></button>
-      <button data-page="accounts">${icon('accounts')} Contas de IA</button>
+    <div class="workspace-label">WORKSPACE <button id="new-workspace" class="icon-button" title="New workspace" aria-label="New workspace">+</button></div>
+    <select id="workspace-select" aria-label="Active workspace"></select>
+    <nav aria-label="Main navigation">
+      <button data-page="projects">${icon('projects')} Projects <span id="project-count" class="count">0</span></button>
+      <button data-page="accounts">${icon('accounts')} AI accounts</button>
 
     </nav>
-    <div class="sidebar-projects"><div class="nav-label">NESTE WORKSPACE</div><div id="project-shortcuts"></div></div>
-    <div class="sidebar-bottom"><button data-page="settings">${icon('settings')} Ambiente</button><div class="local-indicator"><span class="dot"></span> Local, por natureza <span>↗</span></div></div>
+    <div class="sidebar-projects"><div class="nav-label">IN THIS WORKSPACE</div><div id="project-shortcuts"></div></div>
+    <div class="sidebar-bottom"><button data-page="settings">${icon('settings')} Environment</button><div class="local-indicator"><span class="dot"></span> Local by design <span>↗</span></div></div>
   </aside>
   <div class="main-shell">
-    <header id="ide-header" hidden><button id="back-launcher" class="small-button">← Projetos</button><div><strong id="ide-project-name"></strong><small id="ide-project-path"></small></div><div id="ide-agents"></div></header>
-    <nav id="ide-navigation" hidden aria-label="Ferramentas do projeto"><button data-page="editor">${icon('code')} Editor</button><button data-page="git">${icon('git')} Git</button><button data-page="docker">${icon('docker')} Docker</button><button id="ide-reveal">${icon('folder')} Pasta</button></nav>
-    <header class="topbar"><div class="breadcrumb"><span id="workspace-name">Pessoal</span><span>/</span><strong id="page-name">Projetos</strong></div><div class="top-actions"><span class="shortcut">Ctrl + O</span><button id="open-top" class="small-button">${icon('folder')} Abrir projeto</button></div></header>
-    <div id="preview-banner" hidden>Pré-visualização da interface. Abra a aplicação desktop para usar ficheiros, contas, Git e Docker.</div>
-    <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>EXPLORADOR</span><button id="new-file" class="icon-button" title="Novo ficheiro" aria-label="Novo ficheiro">+</button><button id="refresh-files" class="icon-button" title="Atualizar ficheiros">↻</button></div><div id="file-tree"></div></aside><div class="editor-area"><div class="editor-toolbar"><span id="editor-title">Selecione um ficheiro</span><div><button id="reload-file" class="small-button">Reabrir</button><button id="save-file" class="small-button">Guardar</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Espaço para criar.</h2><p>Abra um ficheiro no explorador ou inicie um agente.</p></div><div id="code-editor"></div></div></section></main>
-    <section id="terminal-panel" hidden><div class="terminal-toolbar"><div id="terminal-tabs"></div><button id="hide-terminal" class="icon-button" aria-label="Ocultar terminal" title="Ocultar terminal">−</button><button id="close-terminal" class="icon-button" aria-label="Encerrar terminal" title="Encerrar terminal">×</button></div><div id="terminal-content"></div></section>
+    <header id="ide-header" hidden><button id="back-launcher" class="small-button">← Projects</button><div><strong id="ide-project-name"></strong><small id="ide-project-path"></small></div><div id="ide-agents"></div></header>
+    <nav id="ide-navigation" hidden aria-label="Project tools"><button data-page="editor">${icon('code')} Editor</button><button data-page="git">${icon('git')} Git</button><button data-page="docker">${icon('docker')} Docker</button><button id="ide-reveal">${icon('folder')} Folder</button></nav>
+    <header class="topbar"><div class="breadcrumb"><span id="workspace-name">Personal</span><span>/</span><strong id="page-name">Projects</strong></div><div class="top-actions"><span class="shortcut">Ctrl + O</span><button id="open-top" class="small-button">${icon('folder')} Open project</button></div></header>
+    <div id="preview-banner" hidden>Interface preview. Open the desktop app to use files, accounts, Git, and Docker.</div>
+    <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>EXPLORER</span><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="file-tree"></div></aside><div class="editor-area"><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Room to create.</h2><p>Open a file in the explorer or start an agent.</p></div><div id="code-editor"></div></div></section></main>
+    <section id="terminal-panel" hidden><div class="terminal-toolbar"><div id="terminal-tabs"></div><button id="hide-terminal" class="icon-button" aria-label="Hide terminal" title="Hide terminal">−</button><button id="close-terminal" class="icon-button" aria-label="Close terminal" title="Close terminal">×</button></div><div id="terminal-content"></div></section>
     <footer class="statusbar"><span><span class="dot"></span> <span id="status-text">Aurea Code</span></span><span id="status-file">UTF-8 <span class="status-separator">·</span> Rust + Tauri</span><button id="show-terminal">${icon('terminal')} Terminal</button></footer>
   </div><div id="toast" role="status" aria-live="polite" hidden></div><dialog id="modal"></dialog>`;
 
-let db: Database = { version: 1, workspaces: [{ id: 'preview', name: 'Pessoal', profile_ids: [] }], profiles: [], projects: [] };
+let db: Database = { version: 1, workspaces: [{ id: 'preview', name: 'Personal', profile_ids: [] }], profiles: [], projects: [] };
 let tools: ToolStatus[] = [];
 let workspaceId = localStorage.getItem('aurea.workspace') ?? '';
 let projectId = '';
@@ -67,30 +67,30 @@ const content = element<HTMLElement>('#page-content');
 const editor = new CodeEditor(element('#code-editor'), updateEditorTitle, notify);
 const terminals = new TerminalManager(element('#terminal-panel'), element('#terminal-tabs'), element('#terminal-content'), notify);
 function notify(message: string) { const toast = element('#toast'); toast.textContent = message; toast.hidden = false; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { toast.hidden = true; }, 9000); }
-function desktop() { if (!isTauri()) throw new Error('Esta função está disponível na aplicação desktop.'); }
+function desktop() { if (!isTauri()) throw new Error('This feature is available in the desktop app.'); }
 function workspace() { return db.workspaces.find(w => w.id === workspaceId) ?? db.workspaces[0]; }
 function projects() { return db.projects.filter(p => p.workspace_id === workspace().id); }
-function project() { const value = db.projects.find(p => p.id === projectId); if (!value) throw new Error('Abra um projeto primeiro.'); return value; }
+function project() { const value = db.projects.find(p => p.id === projectId); if (!value) throw new Error('Open a project first.'); return value; }
 function profiles() { return db.profiles.filter(p => workspace().profile_ids.includes(p.id)); }
 async function perform(action: () => Promise<unknown>) { try { await action(); } catch (error) { notify(String(error)); } }
 function bind(selector: string, action: (button: HTMLButtonElement) => Promise<unknown> | unknown) {
   document.querySelectorAll<HTMLButtonElement>(selector).forEach(button => { button.onclick = () => { button.disabled = true; void perform(async () => { try { await action(button); } finally { button.disabled = false; updateEditorTitle(); } }); }; });
 }
-async function confirmAction(message: string) { desktop(); return confirm(message, { title: 'Aurea Code', kind: 'warning', okLabel: 'Continuar', cancelLabel: 'Cancelar' }); }
-async function canDiscard() { return !editor.dirty || confirmAction('Existem alterações por guardar. Descartar estas alterações?'); }
+async function confirmAction(message: string) { desktop(); return confirm(message, { title: 'Aurea Code', kind: 'warning', okLabel: 'Continue', cancelLabel: 'Cancel' }); }
+async function canDiscard() { return !editor.dirty || confirmAction('You have unsaved changes. Discard them?'); }
 function refreshSidebar() {
   const active = workspace(); workspaceId = active.id; localStorage.setItem('aurea.workspace', workspaceId);
   element<HTMLSelectElement>('#workspace-select').innerHTML = db.workspaces.map(w => `<option value="${html(w.id)}" ${w.id === active.id ? 'selected' : ''}>${html(w.name)}</option>`).join('');
   element('#workspace-name').textContent = active.name; element('#project-count').textContent = String(projects().length);
-  element('#project-shortcuts').innerHTML = projects().map(p => `<button class="project-shortcut ${p.id === projectId ? 'selected' : ''}" data-project="${html(p.id)}">${icon('folder')}<span>${html(p.name)}</span></button>`).join('') || '<p class="sidebar-hint">Os seus projetos aparecem aqui.</p>';
+  element('#project-shortcuts').innerHTML = projects().map(p => `<button class="project-shortcut ${p.id === projectId ? 'selected' : ''}" data-project="${html(p.id)}">${icon('folder')}<span>${html(p.name)}</span></button>`).join('') || '<p class="sidebar-hint">Your projects appear here.</p>';
   bind('[data-project]', button => openProject(button.dataset.project!));
   document.querySelectorAll('[data-page]').forEach(node => node.classList.toggle('active', (node as HTMLElement).dataset.page === (page === 'editor' ? 'projects' : page)));
 }
 async function navigate(next: Page) {
-  if (['editor', 'git', 'docker'].includes(next) && !projectId) { notify('Abra um projeto para consultar o Git.'); return; }
+  if (['editor', 'git', 'docker'].includes(next) && !projectId) { notify('Open a project to use its tools.'); return; }
   if (['projects', 'accounts', 'settings'].includes(next) && projectId) {
     if (!await canDiscard()) return;
-    if (terminals.running && !await confirmAction('Voltar ao launcher vai encerrar os terminais deste projeto. Continuar?')) return;
+    if (terminals.running && !await confirmAction('Returning to the launcher will close this project\'s terminals. Continue?')) return;
     await terminals.closeAll(); editor.close(); projectId = ''; treeRevision++;
   }
   stage = projectId ? 'ide' : 'launcher'; app.dataset.stage = stage;
@@ -98,7 +98,7 @@ async function navigate(next: Page) {
   element('#ide-header').hidden = stage !== 'ide'; element('#ide-navigation').hidden = stage !== 'ide';
   if (stage === 'ide') { element('#ide-project-name').textContent = project().name; element('#ide-project-path').textContent = project().path; }
   page = next; pageRevision++; refreshSidebar();
-    const names = { projects: 'Projetos', editor: projectId ? project().name : 'Editor', accounts: 'Contas de IA', git: 'Controlo de versão', docker: 'Docker', settings: 'Ambiente' };
+    const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', accounts: 'AI accounts', git: 'Source control', docker: 'Docker', settings: 'Environment' };
     element('#page-name').textContent = names[page];
     element('#editor-page').hidden = page !== 'editor'; content.hidden = page === 'editor';
     document.querySelector('.editor-agent-bar')?.remove();
@@ -112,23 +112,23 @@ async function navigate(next: Page) {
     else { editor.view?.requestMeasure(); }
 }
 function heading(eyebrow: string, title: string, description: string, action = '') { return `<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`; }
-function agentControls() { return `<div class="agent-controls"><select id="agent-profile" aria-label="Conta do agente">${profiles().map(p => `<option value="${html(p.id)}">${html(p.provider === 'codex' ? 'Codex' : 'Claude')} · ${html(p.name)}</option>`).join('') || '<option value="">Adicione uma conta de IA</option>'}</select><button id="start-agent" class="primary-button">${icon('terminal')} Iniciar agente</button><button id="start-shell" class="small-button">Terminal</button></div>`; }
+function agentControls() { return `<div class="agent-controls"><select id="agent-profile" aria-label="Agent account">${profiles().map(p => `<option value="${html(p.id)}">${html(p.provider === 'codex' ? 'Codex' : 'Claude')} · ${html(p.name)}</option>`).join('') || '<option value="">Add an AI account</option>'}</select><button id="start-agent" class="primary-button">${icon('terminal')} Start agent</button><button id="start-shell" class="small-button">Terminal</button></div>`; }
 function wireAgents() {
   bind('#start-agent', async () => { desktop(); const selected = profiles().find(p => p.id === element<HTMLSelectElement>('#agent-profile').value); if (!selected) { await navigate('accounts'); return; } await terminals.start(project(), 'agent', selected); });
   bind('#start-shell', () => { desktop(); return terminals.start(project(), 'shell'); });
 }
 function renderProjects() {
   const list = projects();
-  content.innerHTML = heading('BEM-VINDO À AUREA CODE', 'Projetos', 'Escolha onde quer continuar a trabalhar.', `<button id="add-project" class="primary-button">${icon('folder')} Abrir pasta</button>`) + `
-    <div class="list-heading"><h2>Neste workspace</h2><label class="search-field">${icon('search')}<input id="project-search" placeholder="Procurar projeto…" aria-label="Procurar projeto"></label></div>
-    <div id="project-grid" class="project-grid">${list.map(p => `<article class="project-card" data-card-name="${html((p.name + ' ' + p.path).toLowerCase())}"><span class="folder-tile">${icon('folder')}</span><div><button class="project-title" data-project="${html(p.id)}">${html(p.name)}</button><p class="project-path" title="${html(p.path)}">${html(p.path)}</p></div><button data-project="${html(p.id)}" class="small-button">Abrir ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><h2>O seu próximo projeto começa aqui.</h2><p>Abra uma pasta do computador para entrar na IDE.</p></div>'}</div>
-    <div class="getting-started"><div><h3>Codex e Claude, com as suas contas.</h3><p>Organize os perfis deste workspace antes de abrir um projeto.</p></div><button id="configure-accounts" class="text-button">Gerir contas ${icon('arrow')}</button></div>`;
+  content.innerHTML = heading('WELCOME TO AUREA CODE', 'Projects', 'Choose where to continue working.', `<button id="add-project" class="primary-button">${icon('folder')} Open folder</button>`) + `
+    <div class="list-heading"><h2>In this workspace</h2><label class="search-field">${icon('search')}<input id="project-search" placeholder="Search projects…" aria-label="Search projects"></label></div>
+    <div id="project-grid" class="project-grid">${list.map(p => `<article class="project-card" data-card-name="${html((p.name + ' ' + p.path).toLowerCase())}"><span class="folder-tile">${icon('folder')}</span><div><button class="project-title" data-project="${html(p.id)}">${html(p.name)}</button><p class="project-path" title="${html(p.path)}">${html(p.path)}</p></div><button data-project="${html(p.id)}" class="small-button">Open ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><h2>Your next project starts here.</h2><p>Open a folder on your computer to enter the IDE.</p></div>'}</div>
+    <div class="getting-started"><div><h3>Codex and Claude, with your accounts.</h3><p>Manage this workspace\'s profiles before opening a project.</p></div><button id="configure-accounts" class="text-button">Manage accounts ${icon('arrow')}</button></div>`;
   bind('#add-project, #add-project-card', addProject); bind('[data-project]', b => openProject(b.dataset.project!)); bind('#configure-accounts', () => navigate('accounts')); wireAgents();
   element<HTMLInputElement>('#project-search').oninput = event => { const query = (event.target as HTMLInputElement).value.toLowerCase(); document.querySelectorAll<HTMLElement>('[data-card-name]').forEach(card => { card.hidden = !card.dataset.cardName!.includes(query); }); };
 }
 async function addProject() {
   desktop(); if (projectId) { await navigate('projects'); if (projectId) return; }
-  const path = await open({ directory: true, multiple: false, title: 'Selecione ou crie a pasta do projeto' }); if (!path) return;
+  const path = await open({ directory: true, multiple: false, title: 'Select or create the project folder' }); if (!path) return;
   db = await invoke<Database>('add_project', { workspaceId, path }); const added = db.projects.find(p => p.path === path && p.workspace_id === workspaceId) ?? db.projects.at(-1)!; await openProject(added.id);
 }
 async function openProject(id: string) {
@@ -158,72 +158,72 @@ async function renderTree() {
         button.onclick = () => void perform(async () => { if (!await canDiscard()) return; await editor.open(id, entry.path); document.querySelectorAll('.file-button').forEach(b => b.classList.remove('selected')); button.classList.add('selected'); }); parent.append(button);
       }
     }
-    if (!entries.length) { const empty = document.createElement('p'); empty.className = 'muted tree-empty'; empty.textContent = 'Pasta vazia'; parent.append(empty); }
+    if (!entries.length) { const empty = document.createElement('p'); empty.className = 'muted tree-empty'; empty.textContent = 'Empty folder'; parent.append(empty); }
   }
   await load('', tree);
 }
 function updateEditorTitle() {
-  element('#editor-title').textContent = editor.file ? `${editor.dirty ? '● ' : ''}${editor.file.path}` : 'Selecione um ficheiro';
+  element('#editor-title').textContent = editor.file ? `${editor.dirty ? '● ' : ''}${editor.file.path}` : 'Select a file';
   element('#editor-empty').hidden = !!editor.file; element('#code-editor').hidden = !editor.file;
   element<HTMLButtonElement>('#save-file').disabled = !editor.dirty;
   element<HTMLButtonElement>('#reload-file').disabled = !editor.file;
 }
 function formDialog(title: string, fields: string, submit: (data: FormData) => Promise<void>) {
   const modal = element<HTMLDialogElement>('#modal');
-  modal.innerHTML = `<form id="modal-form"><div class="modal-heading"><h2>${title}</h2><button type="button" id="modal-close" class="icon-button" aria-label="Fechar">×</button></div>${fields}<p id="modal-error" role="alert"></p><div class="modal-actions"><button type="button" id="modal-cancel" class="small-button">Cancelar</button><button type="submit" class="primary-button">Criar</button></div></form>`;
+  modal.innerHTML = `<form id="modal-form"><div class="modal-heading"><h2>${title}</h2><button type="button" id="modal-close" class="icon-button" aria-label="Close">×</button></div>${fields}<p id="modal-error" role="alert"></p><div class="modal-actions"><button type="button" id="modal-cancel" class="small-button">Cancel</button><button type="submit" class="primary-button">Create</button></div></form>`;
   bind('#modal-close, #modal-cancel', () => modal.close());
   element<HTMLFormElement>('#modal-form').onsubmit = event => { event.preventDefault(); const button = modal.querySelector<HTMLButtonElement>('[type="submit"]')!; button.disabled = true;
     void submit(new FormData(event.target as HTMLFormElement)).then(() => modal.close()).catch(error => { element('#modal-error').textContent = String(error); }).finally(() => { button.disabled = false; }); };
   modal.showModal(); modal.querySelector<HTMLInputElement>('input')?.focus();
 }
-function newWorkspace() { desktop(); formDialog('Novo workspace', '<label>Nome<input name="title" placeholder="Ex.: Trabalho" maxlength="80" required autocomplete="off"></label><p class="muted">Agrupe projetos e escolha as contas de IA que pretende usar.</p>', async data => { if (!await canDiscard()) return; db = await invoke('create_workspace', { title: data.get('title') }); workspaceId = db.workspaces.at(-1)!.id; projectId = ''; editor.close(); await navigate('projects'); }); }
+function newWorkspace() { desktop(); formDialog('New workspace', '<label>Name<input name="title" placeholder="e.g. Work" maxlength="80" required autocomplete="off"></label><p class="muted">Group projects and choose the AI accounts to use.</p>', async data => { if (!await canDiscard()) return; db = await invoke('create_workspace', { title: data.get('title') }); workspaceId = db.workspaces.at(-1)!.id; projectId = ''; editor.close(); await navigate('projects'); }); }
 function renderAccounts() {
-  content.innerHTML = heading('CODEX & CLAUDE', 'Cada conta no seu espaço.', 'Perfis locais com configurações e sessões separadas, associados a este workspace.', `<button id="new-profile" class="primary-button">${icon('plus')} Nova conta</button>`) + `<div class="account-grid">${profiles().map(p => `<article class="account-card"><div class="provider-mark ${p.provider}">${p.provider === 'codex' ? '✳' : '✴'}</div><h2>${html(p.name)}</h2><p>${p.provider === 'codex' ? 'OpenAI Codex' : 'Claude Code'}</p><span class="badge">Perfil local</span><p class="account-help">O login e a identidade ativa são apresentados pelo CLI oficial ao abrir o agente.</p><button class="small-button" data-connect="${html(p.id)}">Escolher projeto ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><span class="empty-icon">✳</span><h2>Traga os seus agentes.</h2><p>Crie um perfil para cada conta pessoal ou profissional.<br>As credenciais são geridas pelos CLIs oficiais.</p></div>'}</div><div class="info-box"><h3>Como funciona</h3><p>Crie um perfil, abra um projeto e inicie o agente. Conclua o login no terminal oficial. Para trocar de conta, abra uma nova sessão com outro perfil; as sessões já abertas mantêm a conta original.</p><p>Os perfis separam configurações. Os processos continuam a ter as permissões do seu utilizador no sistema operativo.</p></div>${db.profiles.some(p => !workspace().profile_ids.includes(p.id)) ? `<div class="link-profile"><h3>Usar uma conta de outro workspace</h3><select id="existing-profile" aria-label="Conta existente">${db.profiles.filter(p => !workspace().profile_ids.includes(p.id)).map(p => `<option value="${html(p.id)}">${html(p.name)} · ${html(p.provider)}</option>`).join('')}</select><button id="link-profile" class="small-button">Associar conta</button></div>` : ''}`;
-  bind('#new-profile', () => { desktop(); formDialog('Nova conta de IA', '<label>Nome do perfil<input name="title" placeholder="Ex.: Codex pessoal" maxlength="80" required></label><label>Agente<select name="provider"><option value="codex">OpenAI Codex</option><option value="claude">Claude Code</option></select></label>', async data => { db = await invoke('create_profile', { workspaceId, title: data.get('title'), provider: data.get('provider') }); refreshSidebar(); renderAccounts(); }); });
-  bind('[data-connect]', () => { notify('Abra um projeto e selecione esta conta no topo da IDE para iniciar sessão.'); return navigate('projects'); });
+  content.innerHTML = heading('CODEX & CLAUDE', 'A space for every account.', 'Local profiles with separate settings and sessions, linked to this workspace.', `<button id="new-profile" class="primary-button">${icon('plus')} New account</button>`) + `<div class="account-grid">${profiles().map(p => `<article class="account-card"><div class="provider-mark ${p.provider}">${p.provider === 'codex' ? '✳' : '✴'}</div><h2>${html(p.name)}</h2><p>${p.provider === 'codex' ? 'OpenAI Codex' : 'Claude Code'}</p><span class="badge">Local profile</span><p class="account-help">The official CLI shows the sign-in flow and active identity when you start the agent.</p><button class="small-button" data-connect="${html(p.id)}">Choose project ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><span class="empty-icon">✳</span><h2>Bring your agents.</h2><p>Create a profile for each personal or work account.<br>Credentials are managed by the official CLIs.</p></div>'}</div><div class="info-box"><h3>How it works</h3><p>Create a profile, open a project, and start the agent. Sign in through the official terminal. To switch accounts, start a new session with another profile; existing sessions keep their original account.</p><p>Profiles separate settings. Processes still run with your operating system user permissions.</p></div>${db.profiles.some(p => !workspace().profile_ids.includes(p.id)) ? `<div class="link-profile"><h3>Use an account from another workspace</h3><select id="existing-profile" aria-label="Existing account">${db.profiles.filter(p => !workspace().profile_ids.includes(p.id)).map(p => `<option value="${html(p.id)}">${html(p.name)} · ${html(p.provider)}</option>`).join('')}</select><button id="link-profile" class="small-button">Link account</button></div>` : ''}`;
+  bind('#new-profile', () => { desktop(); formDialog('New AI account', '<label>Profile name<input name="title" placeholder="e.g. Personal Codex" maxlength="80" required></label><label>Agent<select name="provider"><option value="codex">OpenAI Codex</option><option value="claude">Claude Code</option></select></label>', async data => { db = await invoke('create_profile', { workspaceId, title: data.get('title'), provider: data.get('provider') }); refreshSidebar(); renderAccounts(); }); });
+  bind('[data-connect]', () => { notify('Open a project and select this account at the top of the IDE to sign in.'); return navigate('projects'); });
   bind('#link-profile', async () => { db = await invoke('link_profile', { workspaceId, profileId: element<HTMLSelectElement>('#existing-profile').value }); renderAccounts(); });
 }
 async function renderGit() {
   const current = project(); const revision = pageRevision;
-  content.innerHTML = heading('CONTROLO DE VERSÃO', html(current.name), 'Reveja alterações e crie commits sem sair do seu projeto.', '<button id="git-refresh" class="small-button">↻ Atualizar</button>') + `<div class="git-layout"><div><h3>Estado do repositório</h3><pre id="git-status" class="output">A consultar…</pre><div class="button-row"><button id="git-stage" class="small-button">Preparar tudo</button><button id="git-unstage" class="small-button">Retirar do staging</button></div><label class="commit-label">Mensagem de commit<textarea id="commit-message" placeholder="feat: describe your change" rows="3" maxlength="4096"></textarea></label><button id="git-commit" class="primary-button">${icon('check')} Criar commit</button><p class="muted small">Os hooks do repositório são respeitados.</p></div><div><div class="tabs"><button data-git-view="diff" class="active">Alterações</button><button data-git-view="staged">Staging</button><button data-git-view="log">Histórico</button></div><pre id="git-output" class="output diff">A consultar…</pre></div></div>`;
+  content.innerHTML = heading('SOURCE CONTROL', html(current.name), 'Review changes and create commits without leaving your project.', '<button id="git-refresh" class="small-button">↻ Refresh</button>') + `<div class="git-layout"><div><h3>Repository status</h3><pre id="git-status" class="output">Loading…</pre><div class="button-row"><button id="git-stage" class="small-button">Stage all</button><button id="git-unstage" class="small-button">Unstage</button></div><label class="commit-label">Commit message<textarea id="commit-message" placeholder="feat: describe your change" rows="3" maxlength="4096"></textarea></label><button id="git-commit" class="primary-button">${icon('check')} Create commit</button><p class="muted small">Repository hooks are respected.</p></div><div><div class="tabs"><button data-git-view="diff" class="active">Changes</button><button data-git-view="staged">Staging</button><button data-git-view="log">History</button></div><pre id="git-output" class="output diff">Loading…</pre></div></div>`;
   async function load(action: string) { desktop(); return invoke<string>('git_action', { projectId: current.id, action }); }
   bind('#git-refresh', renderGit);
-  bind('[data-git-view]', async b => { const output = await load(b.dataset.gitView!); if (revision !== pageRevision) return; element('#git-output').textContent = output || 'Sem alterações.'; document.querySelectorAll('[data-git-view]').forEach(n => n.classList.toggle('active', n === b)); });
-  bind('#git-stage, #git-unstage', async b => { if (!await confirmAction(b.id === 'git-stage' ? 'Adicionar todas as alterações deste projeto ao staging? Reveja o diff antes de criar o commit.' : 'Retirar as alterações do staging, mantendo os ficheiros no disco?')) return; await load(b.id === 'git-stage' ? 'stage' : 'unstage'); if (revision === pageRevision) await renderGit(); });
-  bind('#git-commit', async () => { const message = element<HTMLTextAreaElement>('#commit-message').value.trim(); if (!message) throw new Error('Escreva uma mensagem de commit.'); await invoke('git_action', { projectId: current.id, action: 'commit', message }); notify('Commit criado.'); if (revision === pageRevision) await renderGit(); });
-  try { const [status, diff] = await Promise.all([load('status'), load('diff')]); if (revision !== pageRevision) return; element('#git-status').textContent = status || 'Sem alterações.'; element('#git-output').textContent = diff || 'Sem alterações fora do staging.'; }
-  catch (error) { if (revision === pageRevision) { element('#git-status').textContent = String(error); element('#git-output').textContent = 'Abra um projeto com um repositório Git inicializado.'; } }
+  bind('[data-git-view]', async b => { const output = await load(b.dataset.gitView!); if (revision !== pageRevision) return; element('#git-output').textContent = output || 'No changes.'; document.querySelectorAll('[data-git-view]').forEach(n => n.classList.toggle('active', n === b)); });
+  bind('#git-stage, #git-unstage', async b => { if (!await confirmAction(b.id === 'git-stage' ? 'Stage all changes in this project? Review the diff before committing.' : 'Unstage changes while keeping the files on disk?')) return; await load(b.id === 'git-stage' ? 'stage' : 'unstage'); if (revision === pageRevision) await renderGit(); });
+  bind('#git-commit', async () => { const message = element<HTMLTextAreaElement>('#commit-message').value.trim(); if (!message) throw new Error('Enter a commit message.'); await invoke('git_action', { projectId: current.id, action: 'commit', message }); notify('Commit created.'); if (revision === pageRevision) await renderGit(); });
+  try { const [status, diff] = await Promise.all([load('status'), load('diff')]); if (revision !== pageRevision) return; element('#git-status').textContent = status || 'No changes.'; element('#git-output').textContent = diff || 'No unstaged changes.'; }
+  catch (error) { if (revision === pageRevision) { element('#git-status').textContent = String(error); element('#git-output').textContent = 'Open a project with an initialized Git repository.'; } }
 }
 async function renderDocker() {
   const current = project();
   const revision = pageRevision;
-  content.innerHTML = heading('AMBIENTE DE DESENVOLVIMENTO', html(current.name), 'Containers Docker Compose associados à pasta deste projeto.', `<div class="button-row"><button id="compose-up" class="small-button">Compose up + build</button><button id="docker-refresh" class="primary-button">↻ Atualizar</button></div>`) + '<div id="docker-list" class="container-list"><p class="muted">A consultar o Docker…</p></div><pre id="docker-output" class="output" hidden></pre>';
+  content.innerHTML = heading('DEVELOPMENT ENVIRONMENT', html(current.name), 'Docker Compose containers associated with this project\'s folder.', `<div class="button-row"><button id="compose-up" class="small-button">Compose up + build</button><button id="docker-refresh" class="primary-button">↻ Refresh</button></div>`) + '<div id="docker-list" class="container-list"><p class="muted">Loading Docker…</p></div><pre id="docker-output" class="output" hidden></pre>';
   bind('#docker-refresh', renderDocker);
-  bind('#compose-up', async () => { desktop(); const current = project(); if (!await confirmAction(`Construir imagens e iniciar os serviços do Compose em ${current.name}? O ficheiro Compose deste projeto será executado.`)) return; await terminals.start(current, 'compose'); });
+  bind('#compose-up', async () => { desktop(); const current = project(); if (!await confirmAction(`Build images and start Compose services in ${current.name}? This project\'s Compose file will be executed.`)) return; await terminals.start(current, 'compose'); });
   try {
     desktop(); const output = await invoke<string>('docker_action', { projectId: current.id, action: 'list' }); if (revision !== pageRevision) return;
     const containers = parseContainers(output);
-    element('#docker-list').innerHTML = containers.map(c => `<article class="container-row"><span class="container-icon">${icon('docker')}</span><div class="container-name"><h3>${html(c.name)}</h3><p>${html(c.image)}</p><small>${html(c.ports)}</small></div><span class="badge ${c.state === 'running' ? 'running' : ''}">${html(c.status)}</span><div class="button-row"><button class="small-button" data-container="${html(c.id)}" data-docker-action="logs">Logs</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="${c.state === 'running' ? 'stop' : 'start'}">${c.state === 'running' ? 'Parar' : 'Iniciar'}</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="restart">Reiniciar</button></div></article>`).join('') || '<div class="empty-state"><h2>Nenhum container por aqui.</h2><p>Inicie o Compose deste projeto. Containers sem a etiqueta de diretório do Compose não aparecem aqui.</p></div>';
-    bind('[data-docker-action]', async b => { const action = b.dataset.dockerAction!; if (action !== 'logs' && !await confirmAction(`Executar “${action}” no container ${b.dataset.container!.slice(0, 12)} deste projeto?`)) return; const result = await invoke<string>('docker_action', { projectId: current.id, action, container: b.dataset.container }); if (revision !== pageRevision) return; if (action === 'logs') { element('#docker-output').hidden = false; element('#docker-output').textContent = result || 'Sem logs.'; } else await renderDocker(); });
-  } catch (error) { if (revision === pageRevision) { element('#docker-list').innerHTML = `<div class="empty-state"><h2>Docker indisponível</h2><p>${html(String(error))}</p><p>Instale o Docker, inicie o daemon e confirme o contexto e as permissões do seu utilizador.</p></div>`; } }
+    element('#docker-list').innerHTML = containers.map(c => `<article class="container-row"><span class="container-icon">${icon('docker')}</span><div class="container-name"><h3>${html(c.name)}</h3><p>${html(c.image)}</p><small>${html(c.ports)}</small></div><span class="badge ${c.state === 'running' ? 'running' : ''}">${html(c.status)}</span><div class="button-row"><button class="small-button" data-container="${html(c.id)}" data-docker-action="logs">Logs</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="${c.state === 'running' ? 'stop' : 'start'}">${c.state === 'running' ? 'Stop' : 'Start'}</button><button class="small-button" data-container="${html(c.id)}" data-docker-action="restart">Restart</button></div></article>`).join('') || '<div class="empty-state"><h2>No containers here yet.</h2><p>Start this project\'s Compose services. Containers without the Compose working-directory label are not shown here.</p></div>';
+    bind('[data-docker-action]', async b => { const action = b.dataset.dockerAction!; if (action !== 'logs' && !await confirmAction(`Run “${action}” on this project\'s container ${b.dataset.container!.slice(0, 12)}?`)) return; const result = await invoke<string>('docker_action', { projectId: current.id, action, container: b.dataset.container }); if (revision !== pageRevision) return; if (action === 'logs') { element('#docker-output').hidden = false; element('#docker-output').textContent = result || 'No logs.'; } else await renderDocker(); });
+  } catch (error) { if (revision === pageRevision) { element('#docker-list').innerHTML = `<div class="empty-state"><h2>Docker unavailable</h2><p>${html(String(error))}</p><p>Install Docker, start the daemon, and check your context and user permissions.</p></div>`; } }
 }
 async function renderSettings() {
   const revision = pageRevision;
   if (isTauri()) tools = await invoke('tools_status');
   if (revision !== pageRevision) return;
-  content.innerHTML = heading('INTEGRAÇÃO COM O COMPUTADOR', 'Um ambiente preparado.', 'A Aurea usa as ferramentas instaladas no seu sistema.') + `<div class="settings-card"><h2>Ferramentas locais</h2>${['git', 'docker', 'codex', 'claude'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Instale o executável nativo e disponibilize-o no PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Encontrado' : 'Não encontrado'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Integração desktop</h2><p>Menu nativo, atalhos, seleção de pastas e abertura no gestor de ficheiros.</p><p>${trayReady ? 'Ao fechar a janela, a aplicação permanece na bandeja. Use Ficheiro → Sair para encerrar.' : 'A bandeja não está disponível neste ambiente. Fechar a janela apresenta a confirmação de saída.'}</p></div><div class="settings-card"><h2>Atualizações Linux</h2><p>O AppImage de release inclui a fonte de atualização do GitHub para o Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>A pesquisa e aplicação de atualizações são geridas pelas suas preferências no Gear Lever.</p></div></div><div class="info-box"><h3>Contas e segurança</h3><p>O login permanece nos CLIs oficiais. A Aurea não pede chaves API nem copia credenciais para os projetos. Os agentes, Git e Docker executam com as permissões do seu utilizador; abra apenas projetos em que confia.</p></div>`;
+  content.innerHTML = heading('DESKTOP INTEGRATION', 'Ready to work.', 'Aurea uses the tools installed on your system.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker', 'codex', 'claude'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Accounts and security</h3><p>Sign-in stays in the official CLIs. Aurea does not request API keys or copy credentials into projects. Agents, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
 }
 async function quit() {
-  if (editor.dirty && !await confirmAction('Sair e descartar alterações por guardar?')) return;
-  if (terminals.running && !await confirmAction('Existem terminais em execução. Sair vai encerrá-los. Serviços iniciados em background podem continuar ativos.')) return;
+  if (editor.dirty && !await confirmAction('Quit and discard unsaved changes?')) return;
+  if (terminals.running && !await confirmAction('Terminals are still running. Quitting will close them. Background services may keep running.')) return;
   await invoke('exit_app');
 }
 bind('[data-page]', b => navigate(b.dataset.page as Page));
 bind('#back-launcher', () => navigate('projects')); bind('#ide-reveal', () => invoke('reveal_project', { projectId }));
 bind('#new-workspace', newWorkspace); bind('#open-top', addProject);
-bind('#new-file', () => { const current = project(); formDialog('Novo ficheiro', '<label>Caminho relativo ao projeto<input name="path" placeholder="Ex.: src/main.rs" required></label><p class="muted">A pasta de destino deve existir. Ficheiros existentes não serão substituídos.</p>', async data => { if (!await canDiscard()) return; const path = String(data.get('path')); await invoke('create_file', { projectId: current.id, relative: path }); await renderTree(); await editor.open(current.id, path); }); });
+bind('#new-file', () => { const current = project(); formDialog('New file', '<label>Path relative to the project<input name="path" placeholder="e.g. src/main.rs" required></label><p class="muted">The destination folder must exist. Existing files will not be overwritten.</p>', async data => { if (!await canDiscard()) return; const path = String(data.get('path')); await invoke('create_file', { projectId: current.id, relative: path }); await renderTree(); await editor.open(current.id, path); }); });
 bind('#save-file', () => editor.save()); bind('#reload-file', async () => { if (editor.file && await canDiscard()) await editor.open(editor.file.projectId, editor.file.path); }); bind('#refresh-files', renderTree);
-bind('#hide-terminal', () => terminals.hide()); bind('#close-terminal', async () => { if (await confirmAction('Encerrar este terminal? O processo em execução será interrompido.')) await terminals.closeSelected(); });
+bind('#hide-terminal', () => terminals.hide()); bind('#close-terminal', async () => { if (await confirmAction('Close this terminal? The running process will be stopped.')) await terminals.closeSelected(); });
 bind('#show-terminal', () => { desktop(); if (terminals.sessions.length) terminals.show(); else return terminals.start(project(), 'shell'); });
 element<HTMLSelectElement>('#workspace-select').onchange = event => void perform(async () => { const next = (event.target as HTMLSelectElement).value; if (!await canDiscard()) { refreshSidebar(); return; } workspaceId = next; projectId = ''; editor.close(); await navigate('projects'); });
 async function enterLauncher() {
@@ -232,7 +232,7 @@ async function enterLauncher() {
 async function checkUpdates() {
   const revision = ++updateRevision; updateController?.abort(); updateController = new AbortController();
   const controller = updateController;
-  element('#update-status').textContent = 'A verificar atualizações…';
+  element('#update-status').textContent = 'Checking for updates…';
   element('#update-retry').hidden = true; element('#update-release').hidden = true;
   const timeout = window.setTimeout(() => controller.abort(), 8000);
   try {
@@ -241,11 +241,11 @@ async function checkUpdates() {
     const release = await checkRelease(current, fetch, controller.signal);
     if (revision !== updateRevision) return;
     if (!release.available) { await enterLauncher(); return; }
-    element('#update-status').textContent = `Está disponível ${release.version}. Versão instalada: ${current}.`;
+    element('#update-status').textContent = `${release.version} is available. Installed version: ${current}.`;
     element('#update-release').hidden = false;
   } catch {
     if (revision !== updateRevision) return;
-    element('#update-status').textContent = 'Não foi possível verificar atualizações. Pode continuar offline.';
+    element('#update-status').textContent = 'Unable to check for updates. You can continue offline.';
     element('#update-retry').hidden = false;
   } finally { window.clearTimeout(timeout); }
 }
@@ -262,7 +262,7 @@ async function boot() {
     window.setInterval(() => { if (document.visibilityState === 'visible') void editor.sync(); }, 3000);
     window.addEventListener('focus', () => { void editor.sync(); });
   } else element('#preview-banner').hidden = false;
-  element('#status-text').textContent = isTauri() ? 'Ambiente local' : 'Pré-visualização';
+  element('#status-text').textContent = isTauri() ? 'Local environment' : 'Preview';
   updateEditorTitle(); refreshSidebar(); element<HTMLButtonElement>('#update-continue').disabled = false; await checkUpdates();
 }
-void boot().catch(error => { element('#startup-view').hidden = true; app.dataset.stage = 'launcher'; content.innerHTML = `<div class="empty-state"><h2>Não foi possível abrir os workspaces.</h2><p>${html(String(error))}</p><p>Os dados existentes não foram substituídos.</p></div>`; });
+void boot().catch(error => { element('#startup-view').hidden = true; app.dataset.stage = 'launcher'; content.innerHTML = `<div class="empty-state"><h2>Unable to open workspaces.</h2><p>${html(String(error))}</p><p>Existing data has not been overwritten.</p></div>`; });

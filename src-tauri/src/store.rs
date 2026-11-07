@@ -53,7 +53,7 @@ impl Default for Database {
             version: 1,
             workspaces: vec![Workspace {
                 id: id(),
-                name: "Pessoal".into(),
+                name: "Personal".into(),
                 profile_ids: vec![],
             }],
             profiles: vec![],
@@ -71,12 +71,12 @@ impl Store {
         let path = directory.join("workspace.json");
         let db: Database = if path.exists() {
             serde_json::from_slice(&fs::read(path).map_err(error)?)
-                .map_err(|e| format!("Não foi possível ler os workspaces: {e}"))?
+                .map_err(|e| format!("Unable to read workspaces: {e}"))?
         } else {
             Database::default()
         };
         if db.version != 1 {
-            return Err("Versão de dados incompatível. Atualize a aplicação.".into());
+            return Err("Unsupported data version. Update the app.".into());
         }
         Ok(Self {
             directory,
@@ -105,7 +105,7 @@ impl Store {
             .iter()
             .find(|p| p.id == project_id)
             .cloned()
-            .ok_or("Projeto não encontrado.".into())
+            .ok_or("Project not found.".into())
     }
     pub fn profile_home(&self, profile: &Profile) -> Result<PathBuf> {
         Uuid::parse_str(&profile.id).map_err(error)?;
@@ -117,7 +117,7 @@ impl Store {
 pub fn name(value: &str) -> Result<String> {
     let value = value.trim();
     if value.is_empty() || value.chars().count() > 80 || value.chars().any(char::is_control) {
-        return Err("Use um nome entre 1 e 80 caracteres.".into());
+        return Err("Use a name between 1 and 80 characters.".into());
     }
     Ok(value.into())
 }
@@ -131,7 +131,7 @@ pub fn private_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
-    let parent = path.parent().ok_or("Diretório inválido.")?;
+    let parent = path.parent().ok_or("Invalid directory.")?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(error)?;
     if let Ok(metadata) = fs::metadata(path) {
         temporary
@@ -180,7 +180,7 @@ pub fn create_profile(
             .workspaces
             .iter_mut()
             .find(|w| w.id == workspace_id)
-            .ok_or("Workspace não encontrado.")?;
+            .ok_or("Workspace not found.")?;
         workspace.profile_ids.push(profile.id.clone());
         db.profiles.push(profile);
         Ok(())
@@ -194,13 +194,13 @@ pub fn link_profile(
 ) -> Result<Database> {
     store.update(|db| {
         if !db.profiles.iter().any(|p| p.id == profile_id) {
-            return Err("Perfil não encontrado.".into());
+            return Err("Profile not found.".into());
         }
         let workspace = db
             .workspaces
             .iter_mut()
             .find(|w| w.id == workspace_id)
-            .ok_or("Workspace não encontrado.")?;
+            .ok_or("Workspace not found.")?;
         if !workspace.profile_ids.contains(&profile_id) {
             workspace.profile_ids.push(profile_id);
         }
@@ -215,7 +215,7 @@ pub fn add_project(
 ) -> Result<Database> {
     let path = path.canonicalize().map_err(error)?;
     if !path.is_dir() {
-        return Err("Selecione uma pasta existente.".into());
+        return Err("Select an existing folder.".into());
     }
     let title = path
         .file_name()
@@ -224,14 +224,14 @@ pub fn add_project(
         .to_string();
     store.update(|db| {
         if !db.workspaces.iter().any(|w| w.id == workspace_id) {
-            return Err("Workspace não encontrado.".into());
+            return Err("Workspace not found.".into());
         }
         if db
             .projects
             .iter()
             .any(|p| p.workspace_id == workspace_id && p.path == path)
         {
-            return Err("Este projeto já está no workspace.".into());
+            return Err("This project is already in the workspace.".into());
         }
         db.projects.push(Project {
             id: id(),
@@ -259,7 +259,7 @@ mod tests {
         let store = Store::open(dir.path().to_path_buf()).unwrap();
         store
             .update(|db| {
-                db.workspaces[0].name = "Trabalho".into();
+                db.workspaces[0].name = "Work".into();
                 Ok(())
             })
             .unwrap();
@@ -276,7 +276,7 @@ mod tests {
                 .unwrap()
                 .workspaces[0]
                 .name,
-            "Trabalho"
+            "Work"
         );
         assert_eq!(store.snapshot().unwrap().workspaces.len(), 1);
     }

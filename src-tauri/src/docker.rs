@@ -55,7 +55,7 @@ fn scoped_action(
     docker_args(action, id)?;
     let container = inspect_container(id, root)?;
     if !belongs_to(&container, root) {
-        return Err("Este container não pertence ao projeto aberto.".into());
+        return Err("This container does not belong to the open project.".into());
     }
     execute(&docker_args(action, &container.id)?, root)
 }
@@ -83,7 +83,7 @@ pub async fn docker_action(
             )?;
             let ids: Vec<_> = output.lines().filter(|id| !id.is_empty()).collect();
             if ids.len() > 200 {
-                return Err("Demasiados containers para consultar (limite: 200).".into());
+                return Err("Too many containers to inspect (limit: 200).".into());
             }
             let mut result = Vec::new();
             for id in ids {
@@ -124,7 +124,7 @@ pub fn compose_args(root: &Path) -> Result<Vec<OsString>> {
     .iter()
     .map(|name| root.join(name))
     .find(|file| file.is_file())
-    .ok_or("Não existe um ficheiro Compose na raiz deste projeto.")?;
+    .ok_or("No Compose file exists at this project's root.")?;
     Ok(vec![
         "compose".into(),
         "--project-directory".into(),

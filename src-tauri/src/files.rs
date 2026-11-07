@@ -21,19 +21,19 @@ pub fn scoped_path(root: &Path, relative: &str) -> Result<PathBuf> {
             {
                 path.push(part)
             }
-            _ => return Err("Caminho fora do projeto ou protegido.".into()),
+            _ => return Err("Path is outside the project or protected.".into()),
         }
         if fs::symlink_metadata(&path)
             .map_err(error)?
             .file_type()
             .is_symlink()
         {
-            return Err("Links simbólicos não são abertos pelo editor.".into());
+            return Err("The editor does not open symbolic links.".into());
         }
     }
     let path = path.canonicalize().map_err(error)?;
     if !path.starts_with(root) {
-        return Err("Caminho fora do projeto.".into());
+        return Err("Path is outside the project.".into());
     }
     Ok(path)
 }
@@ -54,9 +54,7 @@ pub fn list_files(
     let mut entries = vec![];
     for (index, entry) in fs::read_dir(directory).map_err(error)?.enumerate() {
         if index >= 2000 {
-            return Err(
-                "Pasta demasiado grande para o explorador (limite de 2000 entradas).".into(),
-            );
+            return Err("Folder is too large for the explorer (limit: 2000 entries).".into());
         }
         let entry = entry.map_err(error)?;
         let kind = entry.file_type().map_err(error)?;
@@ -79,7 +77,7 @@ pub fn list_files(
         });
     }
     if entries.len() > 2000 {
-        return Err("Pasta demasiado grande para o explorador (limite de 2000 entradas).".into());
+        return Err("Folder is too large for the explorer (limit: 2000 entries).".into());
     }
     entries.sort_by(|a, b| {
         b.directory
@@ -91,19 +89,19 @@ pub fn list_files(
 pub fn read_text(path: &Path) -> Result<String> {
     let file = fs::File::open(path).map_err(error)?;
     if !file.metadata().map_err(error)?.is_file() {
-        return Err("Não é um ficheiro regular.".into());
+        return Err("Not a regular file.".into());
     }
     let mut bytes = vec![];
     file.take(MAX_FILE + 1)
         .read_to_end(&mut bytes)
         .map_err(error)?;
     if bytes.len() as u64 > MAX_FILE {
-        return Err("O editor suporta ficheiros até 2 MiB.".into());
+        return Err("The editor supports files up to 2 MiB.".into());
     }
     if bytes.contains(&0) {
-        return Err("O editor não suporta ficheiros binários.".into());
+        return Err("The editor does not support binary files.".into());
     }
-    String::from_utf8(bytes).map_err(|_| "O editor suporta apenas texto UTF-8.".into())
+    String::from_utf8(bytes).map_err(|_| "The editor only supports UTF-8 text.".into())
 }
 #[tauri::command]
 pub fn read_file(
@@ -115,19 +113,17 @@ pub fn read_file(
 }
 pub fn save_text(root: &Path, relative: &str, content: &str, original: &str) -> Result<()> {
     if content.len() as u64 > MAX_FILE {
-        return Err("Ficheiro demasiado grande.".into());
+        return Err("File is too large.".into());
     }
     let path = scoped_path(root, relative)?;
     if read_text(&path)? != original {
-        return Err(
-            "O ficheiro mudou no disco. Reabra-o para rever as alterações antes de guardar.".into(),
-        );
+        return Err("The file changed on disk. Reopen it to review changes before saving.".into());
     }
     atomic_write(&path, content.as_bytes())
 }
 pub fn create_text_file(root: &Path, relative: &str) -> Result<()> {
     let relative = Path::new(relative);
-    let filename = relative.file_name().ok_or("Nome de ficheiro inválido.")?;
+    let filename = relative.file_name().ok_or("Invalid filename.")?;
     if filename
         .to_string_lossy()
         .trim_end_matches(['.', ' '])
@@ -136,7 +132,7 @@ pub fn create_text_file(root: &Path, relative: &str) -> Result<()> {
             .components()
             .all(|part| matches!(part, Component::Normal(_)))
     {
-        return Err("Caminho fora do projeto ou protegido.".into());
+        return Err("Path is outside the project or protected.".into());
     }
     let parent = relative.parent().unwrap_or(Path::new(""));
     let path = scoped_path(root, &parent.to_string_lossy())?.join(filename);

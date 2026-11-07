@@ -36,7 +36,7 @@ pub enum TerminalEvent {
 }
 fn size(rows: u16, cols: u16) -> Result<PtySize> {
     if !(2..=500).contains(&rows) || !(2..=500).contains(&cols) {
-        return Err("Dimensões de terminal inválidas.".into());
+        return Err("Invalid terminal dimensions.".into());
     }
     Ok(PtySize {
         rows,
@@ -98,7 +98,7 @@ pub fn terminal_start(
     let project = store.project(&project_id)?;
     let mut sessions = terminals.0.lock().map_err(error)?;
     if sessions.len() >= 8 {
-        return Err("Feche um terminal antes de abrir outro (máximo: 8).".into());
+        return Err("Close a terminal before opening another (maximum: 8).".into());
     }
     let mut command = match kind.as_str() {
         "agent" => {
@@ -107,14 +107,14 @@ pub fn terminal_start(
                 .profiles
                 .iter()
                 .find(|p| Some(&p.id) == profile_id.as_ref())
-                .ok_or("Selecione uma conta.")?;
+                .ok_or("Select an account.")?;
             let workspace = db
                 .workspaces
                 .iter()
                 .find(|w| w.id == project.workspace_id)
-                .ok_or("Workspace não encontrado.")?;
+                .ok_or("Workspace not found.")?;
             if !workspace.profile_ids.contains(&profile.id) {
-                return Err("Esta conta não pertence ao workspace.".into());
+                return Err("This account does not belong to the workspace.".into());
             }
             let program = match profile.provider {
                 Provider::Codex => "codex",
@@ -140,7 +140,7 @@ pub fn terminal_start(
             command.args(crate::docker::compose_args(&project.path)?);
             command
         }
-        _ => return Err("Tipo de terminal inválido.".into()),
+        _ => return Err("Invalid terminal type.".into()),
     };
     command.cwd(&project.path);
     command.env("TERM", "xterm-256color");
@@ -207,10 +207,10 @@ pub fn terminal_write(
     data: String,
 ) -> Result<()> {
     if data.len() > 65536 {
-        return Err("Entrada demasiado grande (limite: 64 KiB).".into());
+        return Err("Input is too large (limit: 64 KiB).".into());
     }
     let mut sessions = terminals.0.lock().map_err(error)?;
-    let session = sessions.get_mut(&session_id).ok_or("Terminal encerrado.")?;
+    let session = sessions.get_mut(&session_id).ok_or("Terminal closed.")?;
     session.writer.write_all(data.as_bytes()).map_err(error)?;
     session.writer.flush().map_err(error)
 }
@@ -226,7 +226,7 @@ pub fn terminal_resize(
         .lock()
         .map_err(error)?
         .get(&session_id)
-        .ok_or("Terminal encerrado.")?
+        .ok_or("Terminal closed.")?
         .master
         .resize(size(rows, cols)?)
         .map_err(error)

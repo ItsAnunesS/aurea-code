@@ -41,12 +41,12 @@ export class CodeEditor {
     try {
       const current = await invoke<string>('read_file', { projectId: file.projectId, relative: file.path });
       if (this.file !== file || this.view !== view || current === file.original) return;
-      if (this.dirty) { if (!this.conflicted) this.report('O ficheiro mudou no disco. Guarde uma cópia das suas alterações e reabra o ficheiro para resolver o conflito.'); this.conflicted = true; return; }
+      if (this.dirty) { if (!this.conflicted) this.report('The file changed on disk. Save a copy of your changes and reopen the file to resolve the conflict.'); this.conflicted = true; return; }
       file.original = current;
       const selection = view.state.selection.main.head;
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: current }, selection: { anchor: Math.min(selection, current.length) } });
       this.changed();
-    } catch (error) { if (!this.conflicted) this.report(`Não foi possível sincronizar o ficheiro: ${String(error)}`); this.conflicted = true; }
+    } catch (error) { if (!this.conflicted) this.report(`Unable to synchronize the file: ${String(error)}`); this.conflicted = true; }
     finally { this.busy = false; }
   }
 }

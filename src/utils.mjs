@@ -3,7 +3,7 @@ export function escapeHtml(value) { return String(value).replace(/[&<>"']/g, cha
 export function parseContainers(output) {
   return output.split(/\r?\n/).filter(line => line.trim()).map(line => {
     const value = JSON.parse(line);
-    if (typeof value.ID !== 'string' || !/^[a-f0-9]{12,64}$/i.test(value.ID)) throw new Error('Resposta Docker inválida.');
+    if (typeof value.ID !== 'string' || !/^[a-f0-9]{12,64}$/i.test(value.ID)) throw new Error('Invalid Docker response.');
     return { id: value.ID, name: String(value.Names ?? ''), image: String(value.Image ?? ''), state: String(value.State ?? ''), status: String(value.Status ?? ''), ports: String(value.Ports ?? '') };
   });
 }

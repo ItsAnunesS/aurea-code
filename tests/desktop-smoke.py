@@ -81,18 +81,21 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#app").dataset.stage === "launcher"')
         assert execute('return document.querySelector("#ide-navigation").hidden')
         assert execute('return document.querySelector("#preview-banner").hidden')
+        assert execute('return document.documentElement.lang') == 'en'
+        assert execute('return document.querySelector("#workspace-name").textContent') == 'Personal'
+        assert execute('return document.querySelector("#add-project").textContent').strip() == 'Open folder'
         click('#new-workspace')
-        input_text('#modal input[name="title"]', 'Workspace de teste')
+        input_text('#modal input[name="title"]', 'Test workspace')
         click('#modal button[type="submit"]')
         wait_for('!document.querySelector("#modal").open')
-        assert execute('return document.querySelector("#workspace-name").textContent') == 'Workspace de teste'
+        assert execute('return document.querySelector("#workspace-name").textContent') == 'Test workspace'
         click('[data-page="accounts"]')
         click('#new-profile')
-        input_text('#modal input[name="title"]', 'Codex de teste')
+        input_text('#modal input[name="title"]', 'Test Codex')
         click('#modal button[type="submit"]')
         wait_for('document.querySelector(".account-card") !== null')
         database = invoke('load_workspace')
-        workspace = next(w for w in database['workspaces'] if w['name'] == 'Workspace de teste')
+        workspace = next(w for w in database['workspaces'] if w['name'] == 'Test workspace')
         assert len(workspace['profile_ids']) == 1
         database = invoke('add_project', {'workspaceId': workspace['id'], 'path': directory})
         registered = database['projects'][-1]
@@ -134,7 +137,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         input_text('.xterm-helper-textarea', 'echo aurea-terminal-smoke\n')
         wait_for('document.querySelector("#terminal-panel").textContent.includes("aurea-terminal-smoke")')
         click('[data-page="docker"]')
-        wait_for('document.querySelector("#docker-list").textContent.includes("Docker indisponível")')
+        wait_for('document.querySelector("#docker-list").textContent.includes("Docker unavailable")')
         # A fixture CLI exercises native Docker routing without granting access to the host daemon.
         docker_fixture = Path('/usr/local/bin/docker')
         assert not docker_fixture.exists(), 'UI test requires an isolated image without Docker'
@@ -156,9 +159,9 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
             invoke('docker_action', {'projectId': registered['id'], 'action': 'stop', 'container': 'b' * 64})
             raise AssertionError('Foreign Docker action was accepted')
         except AssertionError as error:
-            assert 'não pertence' in str(error), str(error)
+            assert 'does not belong' in str(error), str(error)
         input_text('.xterm-helper-textarea', 'exit\n')
-        wait_for('document.querySelector(".terminal-tab").textContent.includes("encerrado")')
+        wait_for('document.querySelector(".terminal-tab").textContent.includes("closed")')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/ide-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
         click('#back-launcher')
@@ -170,11 +173,11 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#docker-list").textContent.includes("container-b")')
         assert 'container-a' not in execute('return document.querySelector("#docker-list").textContent')
         click('[data-page="git"]')
-        wait_for('document.querySelector("#git-status").textContent.includes("Abra a raiz")')
+        wait_for('document.querySelector("#git-status").textContent.includes("Open the repository root")')
         click('#back-launcher')
         click('[data-page="settings"]')
         wait_for('document.querySelector(".tool-row") !== null')
-        assert 'Encontrado' in execute('return document.querySelector(".tool-row").textContent')
+        assert 'Found' in execute('return document.querySelector(".tool-row").textContent')
         click('[data-page="projects"]')
         assert execute('return document.querySelector("#app").dataset.stage === "launcher"')
         time.sleep(.4)

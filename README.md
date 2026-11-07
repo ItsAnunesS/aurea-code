@@ -1,24 +1,24 @@
 # Aurea Code
 
-IDE desktop minimalista em **Rust + Tauri 2**, com interface TypeScript, CodeMirror e xterm.js. MVP para Linux x86_64 (AppImage) e Windows x86_64 (instaladores NSIS `.exe` e MSI).
+A minimal desktop IDE built with **Rust + Tauri 2**, TypeScript, CodeMirror, and xterm.js. Supports Linux x86_64 (AppImage) and Windows x86_64 (NSIS `.exe` and MSI installers). English is the default language for the application, native menus, messages, and new workspace defaults. Existing user-created names and data are preserved.
 
-## Funcionalidades
+## Features
 
-- Arranque em três etapas: verificação de atualizações, launcher de projetos e IDE dedicada ao projeto aberto. Sem plugins nem marketplace.
-- Workspaces persistentes com múltiplos projetos locais e perfis Codex/Claude.
-- Explorador, criação de ficheiros e editor com destaque de sintaxe para JS/TS, JSON e Rust, pesquisa e undo/redo. Outros ficheiros UTF-8 abrem como texto.
-- Sincronização do ficheiro aberto com o disco a cada 3 segundos e ao recuperar o foco. Alterações externas são carregadas se não houver edições locais; guardar recusa conflitos detetados. Limite de 2 MiB por ficheiro.
-- Terminais PTY reais para shell, Codex, Claude e `docker compose up --build`, até oito sessões. Cada terminal identifica projeto e conta.
-- Git: estado, diff, staging, histórico e commits com os hooks normais do repositório. Abra a raiz do repositório como projeto; subpastas não herdam o Git de um projeto superior.
-- Docker: apenas containers Compose cuja etiqueta `com.docker.compose.project.working_dir` corresponde à pasta do projeto aberto. Cada ação volta a validar a associação no backend. Containers sem esta etiqueta ficam ocultos. Compose exige um ficheiro na raiz do projeto, sem procurar em pastas superiores.
-- Menu nativo, atalhos, seleção nativa de pastas, abertura no gestor de ficheiros, instância única e bandeja do sistema.
-- AppImage com fonte de atualização incorporada para Gear Lever e ficheiro `.zsync`.
+- Three-stage startup: update check, project launcher, and a dedicated IDE for the open project. No plugins or marketplace.
+- Persistent workspaces with multiple local projects and separate Codex/Claude profiles.
+- File explorer, file creation, and editing with JS/TS, JSON, and Rust syntax highlighting, search, and undo/redo. Other UTF-8 files open as plain text.
+- Open-file synchronization every three seconds and on focus. External changes reload automatically when there are no local edits. Saving rejects detected conflicts. Maximum file size: 2 MiB.
+- Real PTY terminals for shells, Codex, Claude, and `docker compose up --build`, with up to eight sessions. Each terminal identifies its project and account.
+- Git status, diffs, staging, history, and commits with normal repository hooks. Open the repository root as a project; subfolders do not inherit a parent project's Git repository.
+- Docker only shows Compose containers whose `com.docker.compose.project.working_dir` label matches the open project. Every action verifies ownership again in the backend. Unlabelled containers stay hidden. Compose requires a file at the project root and does not search parent folders.
+- Native menus, keyboard shortcuts, folder selection, file manager integration, single-instance behavior, and system tray support.
+- AppImage update metadata and a `.zsync` file for Gear Lever.
 
-## Desenvolvimento
+## Development
 
-Node 22, Rust 1.99.1 e os pré-requisitos desktop do [Tauri](https://v2.tauri.app/start/prerequisites/). No Linux, a imagem Docker inclui GTK, WebKitGTK, AppIndicator, Rust, Node e as ferramentas AppImage.
+Use Node 22, Rust 1.99.1, and the [Tauri desktop prerequisites](https://v2.tauri.app/start/prerequisites/). The Docker image includes GTK, WebKitGTK, AppIndicator, Rust, Node, and AppImage tools.
 
-Preferencialmente, use Docker para as verificações e empacotamento:
+Docker is the preferred environment for checks and packaging:
 
 ```sh
 docker compose build dev
@@ -29,44 +29,45 @@ docker compose run --rm dev cargo clippy --locked --manifest-path src-tauri/Carg
 docker compose run --rm dev cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 ```
 
-Para testar a janela desktop real em display virtual, depois de gerar o binário release:
+To test the real desktop window in a virtual display, first build the release binary:
 
 ```sh
+docker compose run --rm dev npm run tauri -- build --no-bundle --ci -- --locked
 docker compose build ui-test
 docker compose run --rm ui-test
 ```
 
-O teste usa um projeto temporário e uma área de dados isolada. Verifica workspaces, perfis, guardar/sincronizar ficheiros, Git e terminal reais; a indisponibilidade de Docker e a filtragem entre dois projetos com um CLI de teste também são exercitadas. Guarda uma captura em `artifacts/desktop-preview.png`. Não usa contas reais dos agentes nem o socket Docker do host.
+The smoke test uses temporary projects and an isolated data directory. It verifies English UI defaults, workspaces, profiles, file saving/synchronization, real Git and PTY operations, and switching between two projects. A fixture CLI tests Docker scoping and rejects actions on another project's containers. It does not use real agent accounts or mount the host Docker socket. Screenshots are saved under `artifacts/`.
 
-Para pré-visualizar apenas a interface: `docker compose up dev` e abrir `http://localhost:1420`. O browser identifica explicitamente este modo e não simula acesso a ficheiros, Git, Docker ou agentes.
+For a browser-only preview, run `docker compose up dev` and visit `http://localhost:1420`. The preview is explicitly labelled and does not simulate access to files, Git, Docker, or agents.
 
-Para executar a aplicação desktop no computador, com acesso ao ambiente gráfico e às ferramentas locais:
+To run the desktop app on your computer with access to its display and local tools:
 
 ```sh
 npm ci
 npm run tauri -- dev
 ```
 
-Os volumes Docker isolam `node_modules` e o target Rust do host. Não se monta o socket Docker do host no container de desenvolvimento. A aplicação instalada usa o Docker CLI do utilizador; compilar em Docker não concede controlo dos containers do host.
+Docker volumes isolate `node_modules` and Rust build outputs from the host. The installed application uses your Docker CLI; building inside Docker does not grant access to host containers.
 
-## Primeira utilização
+## First use
 
-1. Ao iniciar, a aplicação consulta a última release estável do GitHub. Se houver atualização, pode abrir a página de download ou continuar. Sem rede, pode tentar novamente ou continuar offline. A instalação continua a ser gerida pelo Gear Lever no Linux ou pelo instalador no Windows.
-2. No launcher, crie um workspace ou use **Pessoal**.
-3. Use **Abrir pasta** e selecione uma pasta existente (também pode criar uma pasta pelo diálogo do sistema).
-4. Em **Contas de IA**, crie um perfil Codex ou Claude para cada conta. Pode associar o mesmo perfil a vários workspaces.
-5. Abra um projeto, escolha o perfil e clique **Iniciar agente**. Faça o login dentro do CLI oficial. A Aurea não fornece nem contorna subscrições dos fornecedores.
-6. Instale `git`, `docker`, `codex` e/ou `claude` como executáveis nativos acessíveis no `PATH`. **Ambiente** mostra os caminhos encontrados. No Windows, esta versão requer `.exe`, não wrappers `.cmd` de npm. Reinicie a IDE após instalar ferramentas.
+1. At startup, Aurea checks the latest stable GitHub release. If an update exists, open its download page or continue. When offline, retry or continue without checking. Installation is managed by Gear Lever on Linux or the installer on Windows.
+2. In the launcher, create a workspace or use **Personal**.
+3. Under **AI accounts**, create a Codex or Claude profile for each account. You can link a profile to multiple workspaces.
+4. Use **Open folder** to select an existing folder, or create one through the native dialog.
+5. Select a profile in the IDE and click **Start agent**. Sign in through the official CLI. Aurea does not provide or bypass provider subscriptions.
+6. Install `git`, `docker`, `codex`, and/or `claude` as native executables on `PATH`. **Environment** shows detected paths. On Windows, this version requires `.exe` executables rather than npm `.cmd` wrappers. Restart Aurea after installing tools.
 
-A IDE mostra editor, Git, Docker e terminais apenas do projeto aberto. Use **← Projetos** para voltar ao launcher; edições por guardar e terminais ativos exigem confirmação, e as sessões são encerradas antes de mudar de projeto.
+The IDE shows tools only for the open project. Use **← Projects** to return to the launcher. Unsaved changes and active terminals require confirmation; sessions close before switching projects.
 
-O Codex recebe um `CODEX_HOME` por perfil; o Claude recebe um `CLAUDE_CONFIG_DIR` por perfil. As variáveis de autenticação mais comuns herdadas do processo pai são removidas das sessões dos agentes, evitando que uma chave API substitua silenciosamente a conta escolhida. Login, tokens, aprovação de ferramentas e histórico são geridos pelos CLIs oficiais. A mudança de perfil abre uma nova sessão e não altera terminais existentes.
+Codex receives a separate `CODEX_HOME` for each profile; Claude receives a separate `CLAUDE_CONFIG_DIR`. Common inherited authentication variables are removed from agent sessions so a parent API key does not silently override the selected account. Sign-in, tokens, approvals, and history remain managed by the official CLIs. Switching profiles starts a new session without changing existing sessions.
 
-Os metadados ficam no diretório de dados do Tauri (`dev.aurea.code`); `workspace.json` não guarda tokens. Os diretórios dos perfis usam permissões `0700` em Unix; no Windows aplica-se a proteção do diretório de dados do utilizador. Os perfis são uma separação de configuração, não uma sandbox entre contas. Políticas empresariais, credential helpers e configurações do próprio CLI continuam a aplicar-se.
+Metadata lives in Tauri's application data directory (`dev.aurea.code`). `workspace.json` does not store tokens. Profile directories use Unix permissions `0700`; Windows uses the protection of your user data directory. Profiles separate configuration, not operating system permissions. Enterprise policies, credential helpers, and CLI settings still apply. Native operating system dialogs and external tool output may follow your system or tool language settings.
 
-Fechar a janela mantém a aplicação na bandeja quando esta está disponível. Para encerrar, use **Ficheiro → Sair** ou o menu da bandeja. Terminais ativos e edições por guardar exigem confirmação. Em GNOME, pode ser necessária uma extensão AppIndicator para ver a bandeja; abrir novamente o executável restaura a janela existente.
+Closing the window keeps the app in the system tray when available. Use **File → Quit** or the tray menu to exit. Running terminals and unsaved edits require confirmation. GNOME may need an AppIndicator extension to display the tray. Launching the executable again restores the existing window.
 
-## Builds e Gear Lever
+## Builds and Gear Lever
 
 ### Linux AppImage
 
@@ -74,48 +75,52 @@ Fechar a janela mantém a aplicação na bandeja quando esta está disponível. 
 docker compose run --rm dev bash scripts/build-appimage.sh
 ```
 
-O resultado fica em `artifacts/`:
+Output under `artifacts/`:
 
-- `Aurea-Code-<versão>-x86_64.AppImage`
-- `Aurea-Code-<versão>-x86_64.AppImage.zsync`
+- `Aurea-Code-<version>-x86_64.AppImage`
+- `Aurea-Code-<version>-x86_64.AppImage.zsync`
 - `SHA256SUMS-linux.txt`
 
-O build usa Debian 12 (glibc 2.36). Valide a distribuição de destino; não se promete compatibilidade com distribuições mais antigas. O primeiro build descarrega as ferramentas de empacotamento usadas pelo Tauri.
+The build uses Debian 12 (glibc 2.36). Verify your target distribution; compatibility with older distributions is not guaranteed. The first build downloads Tauri packaging tools.
 
-A informação incorporada no AppImage é:
+Embedded update information:
 
 ```text
 gh-releases-zsync|ItsAnunesS|aurea-code|latest|Aurea-Code-*-x86_64.AppImage.zsync
 ```
 
-O script falha se essa informação estiver ausente ou se o nome, tamanho e URL do `.zsync` não corresponderem ao AppImage. O `.zsync` aponta para a versão imutável `releases/download/v<versão>/...`.
+Packaging fails if metadata is missing or the `.zsync` filename, size, or URL does not match the AppImage. The `.zsync` URL points to the immutable `releases/download/v<version>/...` asset.
 
-Abra o AppImage no Gear Lever e integre-o. A origem GitHub será detetada pelos metadados; ative a pesquisa automática de atualizações nas preferências do Gear Lever. A frequência de pesquisa, notificações e aplicação das atualizações pertencem ao Gear Lever. O AppImage não altera essas preferências nem instala o Gear Lever. A primeira release pública tem de existir para a pesquisa funcionar.
+Open the AppImage in Gear Lever and integrate it. Gear Lever detects the GitHub source from the embedded metadata. Enable automatic update checks in Gear Lever preferences; check frequency, notifications, and installation are controlled there. Aurea does not modify these settings or install Gear Lever.
 
 ### Windows
 
-Execute num host/runner Windows com os pré-requisitos Tauri:
+On a Windows host or runner with the Tauri prerequisites:
 
 ```powershell
 npm ci
 npm run tauri -- build --bundles nsis,msi --ci -- --locked
 ```
 
-Os instaladores ficam em `src-tauri/target/release/bundle/`. Não estão configurados certificados de assinatura de código. O Windows pode apresentar avisos de editor desconhecido. Atualizações Windows são instaladas manualmente nesta versão.
+Installers are written to `src-tauri/target/release/bundle/`. Code signing certificates are not configured, so Windows may show an unknown publisher warning. Windows updates are installed manually in this version.
 
-### Publicação no GitHub
+### GitHub Actions and publishing
 
-O workflow `.github/workflows/build.yml` testa e compila Linux e Windows. A branch principal é `release`. Em pushes para `release` e pull requests, disponibiliza artefactos sem publicar. Um push de uma tag `v<versão>` publica uma release estável **apenas depois de ambos os builds e testes passarem**, com AppImage, `.zsync` e instaladores Windows juntos.
+The default branch is `release`. `.github/workflows/build.yml` builds and tests both platforms on branch pushes and pull requests. All Rust tests, Clippy, formatting checks, TypeScript checks, and Linux desktop smoke tests remain required.
 
-Antes da tag, mantenha a versão igual em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, atualize os lockfiles e execute as verificações. `node scripts/check-version.mjs` valida a consistência. Não reutilize tags ou substitua ficheiros de uma versão já publicada. A fonte de atualizações está fixada em `ItsAnunesS/aurea-code`; forks devem alterá-la no script e no verificador.
+CI caches Rust dependencies and build outputs separately for Linux and Windows. Linux uses `compose.ci.yaml` to bind cache directories from the runner into Docker. Docker build layers, npm downloads, and bundler tools are cached too. Cache keys include the toolchain/environment and lockfiles, with compatible fallback keys for dependency reuse. Debug information and incremental compilation are disabled for CI test builds to reduce cache size; release optimization is unchanged. The frontend is compiled once by Tauri's `beforeBuildCommand` rather than twice. Already-compressed installer artifacts are uploaded without additional compression.
 
-## Limites deste MVP
+For a release, push the version commit to `release` and wait for both builds to pass before pushing its `v<version>` tag. The tag workflow checks the version and looks for a successful push build of the **exact same commit** on `release`, with both platform artifacts still available. It publishes those tested artifacts without recompiling. A missing, failed, expired, or mismatched build triggers fresh builds and tests for both platforms. Publishing never reuses pull-request or fork artifacts. The first build with an empty cache still compiles dependencies; later builds can reuse them.
 
-- A integração com Codex/Claude usa os CLIs interativos reais. Não replica automaticamente o histórico das aplicações web/desktop nem inclui chat gráfico via app-server/Agent SDK.
-- Não inclui LSP/autocomplete semântico, debugger, extensões VS Code, colaboração online, gestão de branches/remotos ou resolução gráfica de conflitos Git. Operações avançadas podem ser feitas no terminal.
-- O explorador omite `.git`, `node_modules`, `target` e links simbólicos. Não edita binários. A sincronização acompanha o ficheiro aberto; use atualizar para recarregar a árvore.
-- Git e Docker usam argumentos separados, sem interpolar comandos num shell; os comandos da interface são limitados às operações implementadas. Os terminais permitem execução interativa normal e os processos mantêm as permissões do utilizador. Não abra projetos não confiáveis: configurações, hooks, agentes e Compose podem executar código.
-- Encerrar um terminal interrompe o processo principal; serviços Docker e processos deliberadamente destacados podem continuar ativos. A verificação de conflito ao guardar não é um bloqueio distribuído contra escritores externos simultâneos.
-- Valide login e alternância de contas com as versões dos CLIs e as políticas de credenciais do seu sistema. A aplicação não lê nem apresenta tokens.
+Keep versions aligned in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and their lockfiles. Run `node scripts/check-version.mjs` before tagging. Do not reuse tags or replace published assets. The update source is fixed to `ItsAnunesS/aurea-code`; forks must update the source in the updater, native release command, packaging script, and verifier.
 
-Referências: [Tauri](https://v2.tauri.app/), [Codex — diretórios de estado](https://learn.chatgpt.com/docs/config-file/environment-variables), [Claude — configuração](https://code.claude.com/docs/en/settings), [AppImage — atualizações](https://docs.appimage.org/packaging-guide/optional/updates.html), [Gear Lever](https://github.com/mijorus/gearlever).
+## MVP limitations
+
+- Codex/Claude integration uses their real interactive CLIs. It does not mirror web/desktop history or provide a graphical app-server/Agent SDK chat.
+- No semantic autocomplete/LSP, debugger, VS Code extensions, online collaboration, branch/remote management, or graphical Git conflict resolution. Use the terminal for advanced operations.
+- The explorer hides `.git`, `node_modules`, `target`, and symbolic links. Binary editing is unsupported. Synchronization follows the open file; refresh the explorer to reload its tree.
+- Git and Docker commands use separate arguments without shell interpolation. UI commands are restricted to the implemented operations. Interactive terminals retain normal execution capabilities and user permissions. Only open trusted projects: configuration, hooks, agents, and Compose can execute code.
+- Closing a terminal stops its main process. Docker services and deliberately detached processes may keep running. Save-conflict detection is not a distributed lock against concurrent external writers.
+- Validate sign-in and account switching with your CLI versions and credential policies. Aurea does not read or display tokens.
+
+References: [Tauri](https://v2.tauri.app/), [Codex state directories](https://learn.chatgpt.com/docs/config-file/environment-variables), [Claude settings](https://code.claude.com/docs/en/settings), [AppImage updates](https://docs.appimage.org/packaging-guide/optional/updates.html), [Gear Lever](https://github.com/mijorus/gearlever).

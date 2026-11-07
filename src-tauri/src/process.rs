@@ -31,7 +31,7 @@ pub fn executable(name: &str) -> Result<PathBuf> {
         }
     }
     Err(format!(
-        "{name} não encontrado no PATH. Instale o executável nativo e reinicie a Aurea Code."
+        "{name} was not found in PATH. Install the native executable and restart Aurea Code."
     ))
 }
 #[derive(Serialize)]
@@ -101,8 +101,8 @@ pub fn run(program: &str, args: &[&OsStr], directory: &Path) -> Result<String> {
         command.creation_flags(0x08000000);
     }
     let mut child = command.spawn().map_err(error)?;
-    let stdout = child.stdout.take().ok_or("Sem stdout.")?;
-    let stderr = child.stderr.take().ok_or("Sem stderr.")?;
+    let stdout = child.stdout.take().ok_or("No stdout.")?;
+    let stderr = child.stderr.take().ok_or("No stderr.")?;
     let out = thread::spawn(move || collect(stdout));
     let err = thread::spawn(move || collect(stderr));
     let start = Instant::now();
@@ -113,17 +113,19 @@ pub fn run(program: &str, args: &[&OsStr], directory: &Path) -> Result<String> {
         if start.elapsed() > Duration::from_secs(30) {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("A operação excedeu 30 segundos. Verifique o serviço no terminal.".into());
+            return Err(
+                "The operation exceeded 30 seconds. Check the service in the terminal.".into(),
+            );
         }
         thread::sleep(Duration::from_millis(25));
     };
     let stdout = out
         .join()
-        .map_err(|_| "Falha ao ler stdout.")?
+        .map_err(|_| "Failed to read stdout.")?
         .map_err(error)?;
     let stderr = err
         .join()
-        .map_err(|_| "Falha ao ler stderr.")?
+        .map_err(|_| "Failed to read stderr.")?
         .map_err(error)?;
     if !status.success() {
         return Err(format!(
@@ -149,7 +151,7 @@ pub fn git_args(action: &str, message: &str) -> Result<Vec<String>> {
         "commit" if !message.trim().is_empty() && message.len() <= 4096 => {
             vec!["commit", "-m", message]
         }
-        _ => return Err("Operação Git inválida ou mensagem de commit vazia.".into()),
+        _ => return Err("Invalid Git operation or empty commit message.".into()),
     };
     args.extend(operation.iter().map(|s| s.to_string()));
     Ok(args)
@@ -185,14 +187,14 @@ pub fn docker_args(action: &str, container: &str) -> Result<Vec<String>> {
         ]);
     }
     if !(12..=64).contains(&container.len()) || !container.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err("Identificador de container inválido.".into());
+        return Err("Invalid container identifier.".into());
     }
     let args = match action {
         "start" => vec!["start", container],
         "stop" => vec!["stop", "--time", "10", container],
         "restart" => vec!["restart", "--time", "10", container],
         "logs" => vec!["logs", "--tail", "200", container],
-        _ => return Err("Operação Docker inválida.".into()),
+        _ => return Err("Invalid Docker operation.".into()),
     };
     Ok(args.iter().map(|s| s.to_string()).collect())
 }
@@ -205,7 +207,7 @@ pub fn require_repository_root(directory: &Path) -> Result<()> {
     if Path::new(root.trim()).canonicalize().map_err(error)?
         != directory.canonicalize().map_err(error)?
     {
-        return Err("Abra a raiz do repositório como projeto para usar o Git integrado.".into());
+        return Err("Open the repository root as a project to use integrated Git.".into());
     }
     Ok(())
 }
