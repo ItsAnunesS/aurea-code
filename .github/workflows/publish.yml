@@ -41,8 +41,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: '*-x86_64'
-          merge-multiple: true
+          name: linux-x86_64
           github-token: ${{ github.token }}
           run-id: ${{ needs.resolve.outputs.run_id }}
       - uses: actions/setup-node@v4

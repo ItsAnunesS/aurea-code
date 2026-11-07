@@ -8,7 +8,7 @@ if (!process.env.TAURI_SIGNING_PRIVATE_KEY && !process.env.TAURI_SIGNING_PRIVATE
   throw new Error('Configure the TAURI_SIGNING_PRIVATE_KEY GitHub Actions secret before publishing.');
 }
 const directory = process.argv[2] ?? 'artifacts';
-const assets = readdirSync(directory).filter(name => /\.(AppImage|exe|msi)$/.test(name));
+const assets = readdirSync(directory).filter(name => /-x86_64\.AppImage$/.test(name));
 const signed = assets.map(name => {
   const file = join(directory, name);
   const result = spawnSync(process.execPath, ['node_modules/@tauri-apps/cli/tauri.js', 'signer', 'sign', '--app-version', version, file], { encoding: 'utf8', env: process.env });

@@ -12,7 +12,7 @@ module.exports = async ({ github, context, core, wait = ms => new Promise(resolv
     for (const run of candidates) {
       if (run.status !== 'completed' || run.conclusion !== 'success') continue;
       const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { ...repo, run_id: run.id, per_page: 100 });
-      if (!['linux-x86_64', 'windows-x86_64'].every(name => artifacts.some(artifact =>
+      if (!['linux-x86_64'].every(name => artifacts.some(artifact =>
         artifact.name === name && !artifact.expired && artifact.size_in_bytes > 0))) continue;
       core.setOutput('run_id', String(run.id));
       core.info(`Reusing verified build ${run.id} for ${context.sha}.`);

@@ -8,10 +8,7 @@ export function updateManifest(version, assets, published = new Date().toISOStri
     return { signature: asset.signature.trim(), url: `https://github.com/ItsAnunesS/aurea-code/releases/download/v${version}/${encodeURIComponent(asset.name)}` };
   };
   const linux = select(/-x86_64\.AppImage$/);
-  const nsis = select(/_x64-setup\.exe$/);
-  const msi = select(/_x64_en-US\.msi$/);
   return { version, pub_date: published, notes: `Aurea Code ${version}`, platforms: {
     'linux-x86_64': linux, 'linux-x86_64-appimage': linux,
-    'windows-x86_64': nsis, 'windows-x86_64-nsis': nsis, 'windows-x86_64-msi': msi,
   } };
 }

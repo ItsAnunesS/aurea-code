@@ -1,6 +1,6 @@
 # Aurea Code
 
-A minimal desktop IDE built with **Rust + Tauri 2**, TypeScript, CodeMirror, and xterm.js. Supports Linux x86_64 (AppImage) and Windows x86_64 (NSIS `.exe` and MSI installers). English is the default language for the application, native menus, messages, and new workspace defaults. Existing user-created names and data are preserved.
+A minimal desktop IDE built with **Rust + Tauri 2**, TypeScript, CodeMirror, and xterm.js. Releases currently support Linux x86_64 (AppImage) only. Windows builds and releases are temporarily suspended. English is the default language for the application, native menus, messages, and new workspace defaults. Existing user-created names and data are preserved.
 
 ## Features
 
@@ -106,9 +106,9 @@ SQLite, scope, conflict/rollback, query-limit, and CSV tests also run in the nor
 
 The package contains two executables: `aurea-code` (updater) and `aurea-ide` (launcher and IDE). Both are built together; the desktop shortcut starts the updater. The updater stays hidden while the IDE runs to keep Linux AppImage mounts alive. Their windows and native command handlers are separate; workspace/project data remains in `dev.aurea.code`.
 
-Release publication signs the already-built AppImage, EXE, and MSI and produces `latest.json`. The public key is in `tauri.conf.json`; the private key must never enter Git. Before publishing, configure the repository Actions secret `TAURI_SIGNING_PRIVATE_KEY` with the local `.aurea-signing/updater.key` contents, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key is encrypted. Back up the private key securely: future updates must use the same key. Local signing material is ignored by Git. Normal branch builds and pull requests do not need signing secrets. The tag workflow requires them and never recompiles the application.
+Release publication signs the already-built Linux AppImage and produces `latest.json`. The public key is in `tauri.conf.json`; the private key must never enter Git. Before publishing, configure the repository Actions secret `TAURI_SIGNING_PRIVATE_KEY` with the local `.aurea-signing/updater.key` contents, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key is encrypted. Back up the private key securely: future updates must use the same key. Local signing material is ignored by Git. Normal branch builds and pull requests do not need signing secrets. The tag workflow requires them and never recompiles the application.
 
-Signatures bind the installer to its version. Linux uses the AppImage; Windows preserves NSIS versus MSI update format. The first release containing the standalone updater must be installed using the existing installation flow; older versions cannot acquire the new updater logic without that update. For development, build both binaries (`cargo build --manifest-path src-tauri/Cargo.toml --bins`) before starting `npm run tauri -- dev`, or run `aurea-ide` directly against Vite to work on the IDE.
+Signatures bind the installer to its version. The update manifest currently advertises only the Linux AppImage. The first release containing the standalone updater must be installed using the existing installation flow; older versions cannot acquire the new updater logic without that update. For development, build both binaries (`cargo build --manifest-path src-tauri/Cargo.toml --bins`) before starting `npm run tauri -- dev`, or run `aurea-ide` directly against Vite to work on the IDE.
 
 
 ### Linux AppImage
@@ -137,24 +137,13 @@ Packaging fails if the embedded desktop version is missing or incorrect, if upda
 
 Open the AppImage in Gear Lever and integrate it. Gear Lever detects the GitHub source from the embedded metadata. Enable automatic update checks in Gear Lever preferences; check frequency, notifications, and installation are controlled there. Aurea does not modify these settings or install Gear Lever.
 
-### Windows
-
-On a Windows host or runner with the Tauri prerequisites:
-
-```powershell
-npm ci
-npm run tauri -- build --bundles nsis,msi --ci -- --locked
-```
-
-Installers are written to `src-tauri/target/release/bundle/`. Code signing certificates are not configured, so Windows may show an unknown publisher warning. Windows updates are installed manually in this version.
-
 ### GitHub Actions and publishing
 
-The default branch is `release`. `.github/workflows/build.yml` builds and tests both platforms on branch pushes and pull requests. All Rust tests, Clippy, formatting checks, TypeScript checks, and Linux desktop smoke tests remain required.
+The default branch is `release`. `.github/workflows/build.yml` builds and tests Linux only on branch pushes and pull requests. All Rust tests, Clippy, formatting checks, TypeScript checks, and Linux desktop smoke tests remain required.
 
-CI caches Rust dependencies and build outputs separately for Linux and Windows. Linux uses `compose.ci.yaml` to bind cache directories from the runner into Docker. Docker build layers, npm downloads, and bundler tools are cached too. Cache keys include the toolchain/environment and lockfiles, with compatible fallback keys for dependency reuse. Debug information and incremental compilation are disabled for CI test builds to reduce cache size; release optimization is unchanged. The frontend is compiled once by Tauri's `beforeBuildCommand` rather than twice. Already-compressed installer artifacts are uploaded without additional compression.
+CI caches Rust dependencies and build outputs for Linux. Linux uses `compose.ci.yaml` to bind cache directories from the runner into Docker. Docker build layers, npm downloads, and bundler tools are cached too. Cache keys include the toolchain/environment and lockfiles, with compatible fallback keys for dependency reuse. Debug information and incremental compilation are disabled for CI test builds to reduce cache size; release optimization is unchanged. The frontend is compiled once by Tauri's `beforeBuildCommand` rather than twice. Already-compressed installer artifacts are uploaded without additional compression.
 
-For a release, push the version commit to `release` and wait for both builds to pass before pushing its `v<version>` tag. `Publish release` (`.github/workflows/publish.yml`) checks the tag version and finds a successful push build of the **exact same commit** on `release`, with both platform artifacts still available. If that build is queued or running, publication waits for up to 30 minutes. It publishes the tested artifacts without recompiling. Tags never trigger `Desktop builds`. A missing, failed, expired, or mismatched build blocks publication with instructions to finish or rerun the branch build, then rerun publication. Publishing never reuses pull-request or fork artifacts. GitHub shows two workflow entries: one builds the app, and the other only publishes its files. The first build with an empty cache still compiles dependencies; later builds can reuse them.
+For a release, push the version commit to `release` and wait for the Linux build to pass before pushing its `v<version>` tag. `Publish release` (`.github/workflows/publish.yml`) checks the tag version and finds a successful push build of the **exact same commit** on `release`, with the `linux-x86_64` artifact still available. If that build is queued or running, publication waits for up to 30 minutes. It publishes the tested artifacts without recompiling. Tags never trigger `Desktop builds`. A missing, failed, expired, or mismatched build blocks publication with instructions to finish or rerun the branch build, then rerun publication. Publishing never reuses pull-request or fork artifacts. GitHub shows two workflow entries: one builds the app, and the other only publishes its files. The first build with an empty cache still compiles dependencies; later builds can reuse them.
 
 Keep versions aligned in `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, and their lockfiles. Run `node scripts/check-version.mjs` before tagging. Do not reuse tags or replace published assets. The update source is fixed to `ItsAnunesS/aurea-code`; forks must update the source in the updater, native release command, packaging script, and verifier.
 
