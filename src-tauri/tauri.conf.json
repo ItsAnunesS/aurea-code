@@ -1,6 +1,52 @@
 {
-  "$schema": "https://schema.tauri.app/config/2", "productName": "Aurea Code", "version": "0.2.1", "identifier": "dev.aurea.code",
-  "build": {"beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist"},
-  "app": {"windows": [{"label":"main", "title":"Aurea Code", "width":1440, "height":940, "minWidth":1000, "minHeight":680}], "security":{"csp":"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost; connect-src ipc: http://ipc.localhost https://api.github.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-src 'none'"}},
-  "bundle": {"active":true, "targets":"all", "icon":["icons/32x32.png","icons/128x128.png","icons/icon.ico"], "shortDescription":"A space for your code and your agents", "category":"DeveloperTool"}
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Aurea Code",
+  "version": "0.2.1",
+  "identifier": "dev.aurea.code",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "decorations": false,
+        "title": "Aurea Code",
+        "width": 1440,
+        "height": 940,
+        "minWidth": 1000,
+        "minHeight": 680
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost; connect-src ipc: http://ipc.localhost https://api.github.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "A space for your code and your agents",
+    "category": "DeveloperTool",
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCOEZCMzNFOUQ5MkE0M0YKUldRL3BKS2RQck9QUy9sMVBvLzZJZmkyditHTlVva29jMjVFSUd6aHRDZ0Z2c1hURWptNFRyVGoK",
+      "endpoints": [
+        "https://github.com/ItsAnunesS/aurea-code/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      },
+      "requireSignedVersion": true
+    }
+  }
 }

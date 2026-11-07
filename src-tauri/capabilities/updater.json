@@ -1,0 +1,1 @@
+{"identifier":"updater","description":"Only the standalone updater window can use window controls and progress events.","windows":["updater"],"permissions":["core:default","core:window:allow-start-dragging","core:window:allow-close"]}

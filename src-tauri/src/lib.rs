@@ -3,6 +3,7 @@ mod files;
 mod process;
 mod store;
 mod terminal;
+pub mod updater;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -10,6 +11,36 @@ use tauri::{
     Emitter, Manager,
 };
 
+struct AppMenus([Submenu<tauri::Wry>; 3]);
+#[tauri::command]
+fn open_app_menu(
+    window: tauri::WebviewWindow,
+    menus: tauri::State<AppMenus>,
+    name: &str,
+    x: f64,
+    y: f64,
+) -> store::Result<()> {
+    let index = match name {
+        "file" => 0,
+        "edit" => 1,
+        "view" => 2,
+        _ => return Err("Unknown application menu".into()),
+    };
+    window
+        .popup_menu_at(&menus.0[index], tauri::LogicalPosition::new(x, y))
+        .map_err(store::error)
+}
+#[tauri::command]
+fn open_document_link(app: tauri::AppHandle, url: String) -> store::Result<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let parsed = tauri::Url::parse(&url).map_err(store::error)?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err("Only HTTP(S) documentation links are supported".into());
+    }
+    app.opener()
+        .open_url(parsed.as_str(), None::<&str>)
+        .map_err(store::error)
+}
 struct Desktop {
     tray_ready: AtomicBool,
 }
@@ -56,6 +87,7 @@ pub fn run() {
         })
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
+            app.manage(updater::lock_installation(&directory).map_err(std::io::Error::other)?);
             app.manage(store::Store::open(directory).map_err(std::io::Error::other)?);
             let open = MenuItem::with_id(app, "open", "Open project…", true, Some("CmdOrCtrl+O"))?;
             let save = MenuItem::with_id(app, "save", "Save file", true, Some("CmdOrCtrl+S"))?;
@@ -100,6 +132,10 @@ pub fn run() {
                 app,
                 &[&file_menu, &edit_menu, &view_menu],
             )?)?;
+            app.manage(AppMenus([file_menu, edit_menu, view_menu]));
+            if let Some(window) = app.get_webview_window("main") {
+                window.hide_menu()?;
+            }
             app.on_menu_event(|app, event| action(app, event.id.as_ref()));
             let tray_show = MenuItem::with_id(app, "show", "Open Aurea Code", true, None::<&str>)?;
             let tray_quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -164,7 +200,9 @@ pub fn run() {
             terminal::terminal_resize,
             terminal::terminal_stop,
             exit_app,
-            desktop_status
+            desktop_status,
+            open_app_menu,
+            open_document_link
         ])
         .build(tauri::generate_context!())
         .expect("Unable to start Aurea Code");

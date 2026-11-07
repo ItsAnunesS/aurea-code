@@ -7,10 +7,3 @@ export function parseContainers(output) {
     return { id: value.ID, name: String(value.Names ?? ''), image: String(value.Image ?? ''), state: String(value.State ?? ''), status: String(value.Status ?? ''), ports: String(value.Ports ?? '') };
   });
 }
-export function languageFor(path) {
-  const extension = path.split('.').pop()?.toLowerCase();
-  if (['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs'].includes(extension)) return 'javascript';
-  if (extension === 'json') return 'json';
-  if (extension === 'rs') return 'rust';
-  return 'text';
-}

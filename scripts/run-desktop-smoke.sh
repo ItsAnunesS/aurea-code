@@ -7,6 +7,9 @@ XDG_DATA_HOME=$(mktemp -d)
 trap 'rm -rf "$XDG_DATA_HOME"' EXIT
 dbus-run-session -- xvfb-run -a -s '-screen 0 1440x1000x24' bash -c '
   set -euo pipefail
+  # Force updater networking offline so smoke tests never install a remote release.
+  export HTTPS_PROXY=http://127.0.0.1:9
+  export https_proxy="$HTTPS_PROXY"
   driver_log=$(mktemp)
   tauri-driver > "$driver_log" 2>&1 &
   driver_pid=$!

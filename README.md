@@ -6,7 +6,11 @@ A minimal desktop IDE built with **Rust + Tauri 2**, TypeScript, CodeMirror, and
 
 - Three-stage startup: update check, project launcher, and a dedicated IDE for the open project. No plugins or marketplace.
 - Persistent workspaces with multiple local projects and separate Codex/Claude profiles.
-- File explorer, file creation, and editing with JS/TS, JSON, and Rust syntax highlighting, search, and undo/redo. Other UTF-8 files open as plain text.
+- File explorer, file creation, and editing with syntax highlighting detected from filenames and extensions (JavaScript/TypeScript, Rust, Python, Go, HTML/CSS, YAML, SQL, Shell, Markdown, and more). Language support loads on demand from bundled assets, including offline. Unknown UTF-8 formats open as plain text. Search and undo/redo are included.
+- File-type icons identify languages and special files (environment, Docker, Git, dependency manifests, and lockfiles) consistently in the explorer and tabs.
+- Editor tabs preserve each file’s unsaved text, cursor, scroll position, and undo history. Single-click opens a temporary tab; opening another file replaces that tab. Double-click or editing pins it. Closing a dirty tab, leaving the project, or quitting requires confirmation before discarding edits, including edits in background tabs.
+- Documentation preview with Code / Split / Preview modes and live updates for Markdown (`.md`, `.markdown`, `.mdown`, `.mkd`). Text documentation (`.txt`, `.rst`, `.adoc`, `.asciidoc`, and extensionless README/LICENSE) has a plain-text reading view. Markdown includes tables, lists, and code blocks; embedded HTML is escaped and images appear as placeholders. Project-relative links open in the editor; HTTP(S) links open in the default browser.
+- Environment files (`.env`, `.env.*`, and `*.env`) conceal values by default. Each value has an eye button to reveal or hide it for editing. Reopening or reloading from disk hides values again. This is visual masking, not encryption: saving and copying retain the original values.
 - Open-file synchronization every three seconds and on focus. External changes reload automatically when there are no local edits. Saving rejects detected conflicts. Maximum file size: 2 MiB.
 - Real PTY terminals for shells, Codex, Claude, and `docker compose up --build`, with up to eight sessions. Each terminal identifies its project and account.
 - Git status, diffs, staging, history, and commits with normal repository hooks. Open the repository root as a project; subfolders do not inherit a parent project's Git repository.
@@ -52,7 +56,7 @@ Docker volumes isolate `node_modules` and Rust build outputs from the host. The 
 
 ## First use
 
-1. At startup, Aurea checks the latest stable GitHub release. If an update exists, open its download page or continue. When offline, retry or continue without checking. Installation is managed by Gear Lever on Linux or the installer on Windows.
+1. The standalone `aurea-code` updater checks the signed GitHub update manifest, downloads and verifies a newer installer, installs it, and restarts. Only then does it start the separate `aurea-ide` executable at the project launcher. If checking or installation fails, retry or explicitly open the installed version. Close the IDE (including its tray instance) before updating. On Windows, installation may request elevation according to the original installation scope.
 2. In the launcher, create a workspace or use **Personal**.
 3. Under **AI accounts**, create a Codex or Claude profile for each account. You can link a profile to multiple workspaces.
 4. Use **Open folder** to select an existing folder, or create one through the native dialog.
@@ -68,6 +72,13 @@ Metadata lives in Tauri's application data directory (`dev.aurea.code`). `worksp
 Closing the window keeps the app in the system tray when available. Use **File → Quit** or the tray menu to exit. Running terminals and unsaved edits require confirmation. GNOME may need an AppIndicator extension to display the tray. Launching the executable again restores the existing window.
 
 ## Builds and Gear Lever
+
+The package contains two executables: `aurea-code` (updater) and `aurea-ide` (launcher and IDE). Both are built together; the desktop shortcut starts the updater. The updater stays hidden while the IDE runs to keep Linux AppImage mounts alive. Their windows and native command handlers are separate; project/account data remains in `dev.aurea.code`.
+
+Release publication signs the already-built AppImage, EXE, and MSI and produces `latest.json`. The public key is in `tauri.conf.json`; the private key must never enter Git. Before publishing, configure the repository Actions secret `TAURI_SIGNING_PRIVATE_KEY` with the local `.aurea-signing/updater.key` contents, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key is encrypted. Back up the private key securely: future updates must use the same key. Local signing material is ignored by Git. Normal branch builds and pull requests do not need signing secrets. The tag workflow requires them and never recompiles the application.
+
+Signatures bind the installer to its version. Linux uses the AppImage; Windows preserves NSIS versus MSI update format. The first release containing the standalone updater must be installed using the existing installation flow; older versions cannot acquire the new updater logic without that update. For development, build both binaries (`cargo build --manifest-path src-tauri/Cargo.toml --bins`) before starting `npm run tauri -- dev`, or run `aurea-ide` directly against Vite to work on the IDE.
+
 
 ### Linux AppImage
 
@@ -89,7 +100,9 @@ Embedded update information:
 gh-releases-zsync|ItsAnunesS|aurea-code|latest|Aurea-Code-*-x86_64.AppImage.zsync
 ```
 
-Packaging fails if metadata is missing or the `.zsync` filename, size, or URL does not match the AppImage. The `.zsync` URL points to the immutable `releases/download/v<version>/...` asset.
+The package embeds `X-AppImage-Version` from the project version so Gear Lever displays the installed version. Existing installations receive this metadata when the new AppImage is integrated or installed as an update.
+
+Packaging fails if the embedded desktop version is missing or incorrect, if update metadata is missing or the `.zsync` filename, size, or URL does not match the AppImage. The `.zsync` URL points to the immutable `releases/download/v<version>/...` asset.
 
 Open the AppImage in Gear Lever and integrate it. Gear Lever detects the GitHub source from the embedded metadata. Enable automatic update checks in Gear Lever preferences; check frequency, notifications, and installation are controlled there. Aurea does not modify these settings or install Gear Lever.
 

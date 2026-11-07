@@ -32,6 +32,9 @@ test('tag publication has no compilation jobs or fallback artifact source', () =
   const build = readFileSync('.github/workflows/build.yml', 'utf8');
   const publish = readFileSync('.github/workflows/publish.yml', 'utf8');
   assert.doesNotMatch(build.split('\npermissions:')[0], /tags:/);
-  assert.doesNotMatch(publish, /cargo |npm (?:ci|run|test)|docker (?:compose|build)|workflow_dispatch:/);
+  assert.doesNotMatch(publish, /cargo |npm run (?:build|tauri[^\n]*build)|docker (?:compose|build)|workflow_dispatch:/);
+  assert.match(publish, /node scripts\/sign-release\.mjs/);
+  const publication = publish.slice(publish.indexOf('  publish:\n'));
+  assert.ok(publication.indexOf('actions/checkout@') < publication.indexOf('actions/download-artifact@'), 'Checkout must not clean already-downloaded installers.');
   assert.match(publish, /run-id: \$\{\{ needs\.resolve\.outputs\.run_id \}\}/);
 });

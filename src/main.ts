@@ -1,5 +1,7 @@
-import { getVersion } from '@tauri-apps/api/app';
-import { checkRelease } from './updates.mjs';
+import { fileIconMarkup, fileIconFor, folderIconMarkup } from './file-icons.mjs';
+import { DocumentPreview } from './document-preview';
+import { resolveDocumentLink } from './document-renderer.mjs';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open, confirm } from '@tauri-apps/plugin-dialog';
@@ -26,10 +28,11 @@ const icons: Record<string, string> = {
 function icon(name: string) { return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] ?? icons.code}</svg>`; }
 function element<T extends HTMLElement>(selector: string) { const node = document.querySelector<T>(selector); if (!node) throw new Error(`Missing element: ${selector}`); return node; }
 const app = element<HTMLDivElement>('#app');
+app.insertAdjacentHTML('beforebegin', `<header class="window-bar" aria-label="Application title bar"><img src="/aurea-mark.svg" alt="" aria-hidden="true"><nav aria-label="Application menu"><button data-menu="file" aria-haspopup="menu">File</button><button data-menu="edit" aria-haspopup="menu">Edit</button><button data-menu="view" aria-haspopup="menu">View</button></nav><div class="window-drag" data-tauri-drag-region>Aurea Code</div><div class="window-controls"><button id="window-minimize" aria-label="Minimize" title="Minimize">−</button><button id="window-maximize" aria-label="Maximize" title="Maximize">□</button><button id="window-close" aria-label="Close window" title="Close window">×</button></div></header>`);
 app.innerHTML = `
-  <section id="startup-view"><div class="startup-card"><span class="brand-mark">Λ</span><h1>Aurea Code</h1><p id="update-status">Checking for updates…</p><div class="button-row"><button id="update-release" class="primary-button" hidden>View update</button><button id="update-retry" class="small-button" hidden>Try again</button><button id="update-continue" class="small-button" disabled>Continue</button></div><p class="muted small">Updates from GitHub · AppImage integrated with Gear Lever</p></div></section>
+
   <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">Λ</span><span>Aurea<span class="brand-light"> Code</span></span><span class="version">MVP</span></div>
+    <div class="brand"><img class="brand-mark" src="/aurea-mark.svg" alt="" aria-hidden="true"><span>Aurea<span class="brand-light"> Code</span></span><span class="version">MVP</span></div>
     <div class="workspace-label">WORKSPACE <button id="new-workspace" class="icon-button" title="New workspace" aria-label="New workspace">+</button></div>
     <select id="workspace-select" aria-label="Active workspace"></select>
     <nav aria-label="Main navigation">
@@ -45,19 +48,17 @@ app.innerHTML = `
     <nav id="ide-navigation" hidden aria-label="Project tools"><button data-page="editor">${icon('code')} Editor</button><button data-page="git">${icon('git')} Git</button><button data-page="docker">${icon('docker')} Docker</button><button id="ide-reveal">${icon('folder')} Folder</button></nav>
     <header class="topbar"><div class="breadcrumb"><span id="workspace-name">Personal</span><span>/</span><strong id="page-name">Projects</strong></div><div class="top-actions"><span class="shortcut">Ctrl + O</span><button id="open-top" class="small-button">${icon('folder')} Open project</button></div></header>
     <div id="preview-banner" hidden>Interface preview. Open the desktop app to use files, accounts, Git, and Docker.</div>
-    <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>EXPLORER</span><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="file-tree"></div></aside><div class="editor-area"><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Room to create.</h2><p>Open a file in the explorer or start an agent.</p></div><div id="code-editor"></div></div></section></main>
+    <main id="content"><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>EXPLORER</span><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="file-tree"></div></aside><div class="editor-area"><div id="editor-tabs" role="tablist" aria-label="Open files" hidden></div><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><span id="document-modes" hidden role="group" aria-label="Document view"><button data-document-mode="code" aria-pressed="true">Code</button><button data-document-mode="split" aria-pressed="false">Split</button><button data-document-mode="preview" aria-pressed="false">Preview</button></span><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Room to create.</h2><p>Open a file in the explorer or start an agent.</p></div><div class="document-workspace"><div id="code-editor"></div><article id="document-preview" class="document-preview" aria-label="Document preview" hidden></article></div></div></section></main>
     <section id="terminal-panel" hidden><div class="terminal-toolbar"><div id="terminal-tabs"></div><button id="hide-terminal" class="icon-button" aria-label="Hide terminal" title="Hide terminal">−</button><button id="close-terminal" class="icon-button" aria-label="Close terminal" title="Close terminal">×</button></div><div id="terminal-content"></div></section>
     <footer class="statusbar"><span><span class="dot"></span> <span id="status-text">Aurea Code</span></span><span id="status-file">UTF-8 <span class="status-separator">·</span> Rust + Tauri</span><button id="show-terminal">${icon('terminal')} Terminal</button></footer>
-  </div><div id="toast" role="status" aria-live="polite" hidden></div><dialog id="modal"></dialog>`;
+  </div><div id="toast" role="status" aria-live="polite" hidden></div><dialog id="modal"></dialog><dialog id="discard-modal" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Unsaved changes</h2><p id="discard-message"></p><div class="modal-actions"><button id="discard-cancel" class="small-button" value="cancel" autofocus>Cancel</button><button id="discard-confirm" class="primary-button" value="discard">Discard changes</button></div></form></dialog>`;
 
 let db: Database = { version: 1, workspaces: [{ id: 'preview', name: 'Personal', profile_ids: [] }], profiles: [], projects: [] };
 let tools: ToolStatus[] = [];
 let workspaceId = localStorage.getItem('aurea.workspace') ?? '';
 let projectId = '';
 let page: Page = 'projects';
-let stage: 'updater' | 'launcher' | 'ide' = 'updater';
-let updateController: AbortController | undefined;
-let updateRevision = 0;
+let stage: 'launcher' | 'ide' = 'launcher';
 app.dataset.stage = stage;
 let pageRevision = 0;
 let toastTimer = 0;
@@ -65,6 +66,7 @@ let trayReady = false;
 let treeRevision = 0;
 const content = element<HTMLElement>('#page-content');
 const editor = new CodeEditor(element('#code-editor'), updateEditorTitle, notify);
+const documentPreview = new DocumentPreview(element('#document-preview'), element('#code-editor'), element('#document-modes'), () => editor.view?.requestMeasure());
 const terminals = new TerminalManager(element('#terminal-panel'), element('#terminal-tabs'), element('#terminal-content'), notify);
 function notify(message: string) { const toast = element('#toast'); toast.textContent = message; toast.hidden = false; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { toast.hidden = true; }, 9000); }
 function desktop() { if (!isTauri()) throw new Error('This feature is available in the desktop app.'); }
@@ -77,7 +79,17 @@ function bind(selector: string, action: (button: HTMLButtonElement) => Promise<u
   document.querySelectorAll<HTMLButtonElement>(selector).forEach(button => { button.onclick = () => { button.disabled = true; void perform(async () => { try { await action(button); } finally { button.disabled = false; updateEditorTitle(); } }); }; });
 }
 async function confirmAction(message: string) { desktop(); return confirm(message, { title: 'Aurea Code', kind: 'warning', okLabel: 'Continue', cancelLabel: 'Cancel' }); }
-async function canDiscard() { return !editor.dirty || confirmAction('You have unsaved changes. Discard them?'); }
+function confirmDiscard(message: string): Promise<boolean> {
+  const modal = element<HTMLDialogElement>('#discard-modal');
+  if (modal.open) return Promise.resolve(false);
+  element('#discard-message').textContent = message;
+  modal.returnValue = 'cancel';
+  return new Promise(resolve => {
+    modal.onclose = () => { modal.onclose = null; resolve(modal.returnValue === 'discard'); };
+    modal.showModal();
+  });
+}
+async function canDiscard(all = true) { return !(all ? editor.hasUnsavedChanges : editor.dirty) || confirmDiscard('You have unsaved changes in open files. Discard them?'); }
 function refreshSidebar() {
   const active = workspace(); workspaceId = active.id; localStorage.setItem('aurea.workspace', workspaceId);
   element<HTMLSelectElement>('#workspace-select').innerHTML = db.workspaces.map(w => `<option value="${html(w.id)}" ${w.id === active.id ? 'selected' : ''}>${html(w.name)}</option>`).join('');
@@ -94,7 +106,6 @@ async function navigate(next: Page) {
     await terminals.closeAll(); editor.close(); projectId = ''; treeRevision++;
   }
   stage = projectId ? 'ide' : 'launcher'; app.dataset.stage = stage;
-  element('#startup-view').hidden = true;
   element('#ide-header').hidden = stage !== 'ide'; element('#ide-navigation').hidden = stage !== 'ide';
   if (stage === 'ide') { element('#ide-project-name').textContent = project().name; element('#ide-project-path').textContent = project().path; }
   page = next; pageRevision++; refreshSidebar();
@@ -132,7 +143,7 @@ async function addProject() {
   db = await invoke<Database>('add_project', { workspaceId, path }); const added = db.projects.find(p => p.path === path && p.workspace_id === workspaceId) ?? db.projects.at(-1)!; await openProject(added.id);
 }
 async function openProject(id: string) {
-  desktop(); if (id !== projectId && !await canDiscard()) return;
+  desktop();
   if (id !== projectId && projectId) { await navigate('projects'); if (projectId) return; }
   terminals.activate(id);
   if (id !== projectId) editor.close(); projectId = id;
@@ -150,21 +161,63 @@ async function renderTree() {
     const entries = await invoke<FileEntry[]>('list_files', { projectId: id, relative }); if (id !== projectId || revision !== treeRevision) return;
     for (const entry of entries) {
       if (entry.directory) {
-        const details = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = entry.name; details.append(summary); parent.append(details);
+        const details = document.createElement('details'); const summary = document.createElement('summary'); summary.innerHTML = folderIconMarkup(); const label = document.createElement('span'); label.textContent = entry.name; summary.append(label); summary.title = entry.path; details.append(summary); parent.append(details);
         let loaded = false;
         details.ontoggle = () => { if (details.open && !loaded) { loaded = true; const children = document.createElement('div'); children.className = 'tree-children'; details.append(children); void load(entry.path, children).catch(e => { loaded = false; children.remove(); notify(String(e)); }); } };
       } else {
-        const button = document.createElement('button'); button.className = 'file-button'; button.textContent = entry.name; button.title = entry.path;
-        button.onclick = () => void perform(async () => { if (!await canDiscard()) return; await editor.open(id, entry.path); document.querySelectorAll('.file-button').forEach(b => b.classList.remove('selected')); button.classList.add('selected'); }); parent.append(button);
+        const button = document.createElement('button'); button.className = 'file-button'; button.innerHTML = fileIconMarkup(entry.path); const label = document.createElement('span'); label.className = 'file-label'; label.textContent = entry.name; button.append(label); button.title = entry.path; button.setAttribute('aria-label', `${entry.name} (${fileIconFor(entry.path).label})`);
+        button.onclick = () => void perform(() => editor.open(id, entry.path));
+        button.ondblclick = () => void perform(() => editor.open(id, entry.path, true)); parent.append(button);
       }
     }
     if (!entries.length) { const empty = document.createElement('p'); empty.className = 'muted tree-empty'; empty.textContent = 'Empty folder'; parent.append(empty); }
   }
   await load('', tree);
 }
+function renderEditorTabs() {
+  const host = element('#editor-tabs');
+  host.hidden = editor.tabs.length === 0;
+  for (const node of Array.from(host.children)) {
+    if (!editor.tabs.some(tab => String(tab.id) === (node as HTMLElement).dataset.tabId)) node.remove();
+  }
+  for (const [index, tab] of editor.tabs.entries()) {
+    let node = Array.from(host.children).find(child => (child as HTMLElement).dataset.tabId === String(tab.id)) as HTMLElement | undefined;
+    if (!node) {
+      node = document.createElement('div'); node.className = 'editor-tab'; node.dataset.tabId = String(tab.id);
+      const select = document.createElement('button'); select.className = 'editor-tab-select'; select.setAttribute('role', 'tab'); select.innerHTML = fileIconMarkup(tab.path); const name = document.createElement('span'); name.className = 'tab-file-name'; name.textContent = tab.path.split('/').pop()!; const dirty = document.createElement('span'); dirty.className = 'tab-dirty'; dirty.textContent = '●'; dirty.setAttribute('aria-hidden', 'true'); select.append(name, dirty);
+      select.onclick = () => void perform(() => editor.open(tab.projectId, tab.path));
+      select.ondblclick = () => editor.pin(tab);
+      select.onkeydown = event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const index = editor.tabs.indexOf(tab);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? editor.tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + editor.tabs.length) % editor.tabs.length;
+        const target = editor.tabs[next];
+        void perform(async () => { await editor.open(target.projectId, target.path); host.querySelector<HTMLButtonElement>(`[data-tab-id="${target.id}"] .editor-tab-select`)?.focus(); });
+      };
+      const close = document.createElement('button'); close.className = 'editor-tab-close'; close.textContent = '×';
+      close.onclick = () => void perform(async () => { if (editor.isDirty(tab) && !await confirmDiscard(`Close ${tab.path} and discard its unsaved changes?`)) return; editor.closeTab(tab); });
+      node.append(select, close); host.append(node);
+    }
+    if (host.children[index] !== node) host.insertBefore(node, host.children[index] ?? null);
+    const active = editor.file === tab;
+    node.classList.toggle('active', active); node.classList.toggle('temporary', !tab.pinned);
+    const select = node.querySelector<HTMLButtonElement>('.editor-tab-select')!;
+    select.querySelector<HTMLElement>('.tab-dirty')!.hidden = !editor.isDirty(tab);
+    select.setAttribute('aria-label', `${tab.path} (${fileIconFor(tab.path).label})${editor.isDirty(tab) ? ' — Unsaved changes' : ''}`);
+    select.title = `${tab.path}${tab.pinned ? '' : ' — Preview (double-click to keep open)'}`;
+    select.setAttribute('aria-selected', String(active)); select.tabIndex = active ? 0 : -1;
+    node.querySelector('.editor-tab-close')!.setAttribute('aria-label', `Close ${tab.path}`);
+  }
+}
 function updateEditorTitle() {
+  renderEditorTabs();
+  document.querySelectorAll<HTMLElement>('.file-button').forEach(button => button.classList.toggle('selected', button.title === editor.file?.path));
+  documentPreview.update(editor.file ? `${editor.file.projectId}/${editor.file.path}` : '', editor.view?.state.doc.toString() ?? '');
+  element('#status-file').textContent = editor.file ? `UTF-8 · ${editor.languageName}` : 'UTF-8 · Rust + Tauri';
   element('#editor-title').textContent = editor.file ? `${editor.dirty ? '● ' : ''}${editor.file.path}` : 'Select a file';
-  element('#editor-empty').hidden = !!editor.file; element('#code-editor').hidden = !editor.file;
+  element('#editor-empty').hidden = !!editor.file;
+  element('.document-workspace').hidden = !editor.file;
   element<HTMLButtonElement>('#save-file').disabled = !editor.dirty;
   element<HTMLButtonElement>('#reload-file').disabled = !editor.file;
 }
@@ -214,55 +267,55 @@ async function renderSettings() {
   content.innerHTML = heading('DESKTOP INTEGRATION', 'Ready to work.', 'Aurea uses the tools installed on your system.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker', 'codex', 'claude'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Accounts and security</h3><p>Sign-in stays in the official CLIs. Aurea does not request API keys or copy credentials into projects. Agents, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
 }
 async function quit() {
-  if (editor.dirty && !await confirmAction('Quit and discard unsaved changes?')) return;
+  if (editor.hasUnsavedChanges && !await confirmDiscard('Quit and discard unsaved changes in open files?')) return;
   if (terminals.running && !await confirmAction('Terminals are still running. Quitting will close them. Background services may keep running.')) return;
   await invoke('exit_app');
+}
+bind('[data-menu]', async button => {
+  desktop();
+  const bounds = button.getBoundingClientRect();
+  await invoke('open_app_menu', { name: button.dataset.menu, x: bounds.left, y: bounds.bottom });
+});
+bind('#window-minimize', () => { desktop(); return getCurrentWindow().minimize(); });
+bind('#window-maximize', () => { desktop(); return getCurrentWindow().toggleMaximize(); });
+bind('#window-close', () => { desktop(); return getCurrentWindow().close(); });
+async function updateWindowControls() {
+  const maximized = await getCurrentWindow().isMaximized();
+  const button = element<HTMLButtonElement>('#window-maximize');
+  button.textContent = maximized ? '❐' : '□';
+  button.title = maximized ? 'Restore' : 'Maximize';
+  button.setAttribute('aria-label', button.title);
 }
 bind('[data-page]', b => navigate(b.dataset.page as Page));
 bind('#back-launcher', () => navigate('projects')); bind('#ide-reveal', () => invoke('reveal_project', { projectId }));
 bind('#new-workspace', newWorkspace); bind('#open-top', addProject);
-bind('#new-file', () => { const current = project(); formDialog('New file', '<label>Path relative to the project<input name="path" placeholder="e.g. src/main.rs" required></label><p class="muted">The destination folder must exist. Existing files will not be overwritten.</p>', async data => { if (!await canDiscard()) return; const path = String(data.get('path')); await invoke('create_file', { projectId: current.id, relative: path }); await renderTree(); await editor.open(current.id, path); }); });
-bind('#save-file', () => editor.save()); bind('#reload-file', async () => { if (editor.file && await canDiscard()) await editor.open(editor.file.projectId, editor.file.path); }); bind('#refresh-files', renderTree);
+bind('#new-file', () => { const current = project(); formDialog('New file', '<label>Path relative to the project<input name="path" placeholder="e.g. src/main.rs" required></label><p class="muted">The destination folder must exist. Existing files will not be overwritten.</p>', async data => { const path = String(data.get('path')); await invoke('create_file', { projectId: current.id, relative: path }); await renderTree(); await editor.open(current.id, path, true); }); });
+element('#document-preview').onclick = event => {
+  const link = (event.target as HTMLElement).closest<HTMLElement>('[data-document-link]');
+  if (!link || !editor.file) return;
+  void perform(async () => {
+    const target = resolveDocumentLink(editor.file!.path, link.dataset.documentLink!);
+    if (target.external) { await invoke('open_document_link', { url: target.external }); return; }
+    if (target.path) await editor.open(editor.file!.projectId, target.path);
+  });
+};
+bind('#save-file', () => editor.save()); bind('#reload-file', async () => { if (editor.file && await canDiscard(false)) await editor.reload(); }); bind('#refresh-files', renderTree);
 bind('#hide-terminal', () => terminals.hide()); bind('#close-terminal', async () => { if (await confirmAction('Close this terminal? The running process will be stopped.')) await terminals.closeSelected(); });
 bind('#show-terminal', () => { desktop(); if (terminals.sessions.length) terminals.show(); else return terminals.start(project(), 'shell'); });
 element<HTMLSelectElement>('#workspace-select').onchange = event => void perform(async () => { const next = (event.target as HTMLSelectElement).value; if (!await canDiscard()) { refreshSidebar(); return; } workspaceId = next; projectId = ''; editor.close(); await navigate('projects'); });
-async function enterLauncher() {
-  updateRevision++; updateController?.abort(); await navigate('projects');
-}
-async function checkUpdates() {
-  const revision = ++updateRevision; updateController?.abort(); updateController = new AbortController();
-  const controller = updateController;
-  element('#update-status').textContent = 'Checking for updates…';
-  element('#update-retry').hidden = true; element('#update-release').hidden = true;
-  const timeout = window.setTimeout(() => controller.abort(), 8000);
-  try {
-    if (!isTauri()) { await enterLauncher(); return; }
-    const current = await getVersion();
-    const release = await checkRelease(current, fetch, controller.signal);
-    if (revision !== updateRevision) return;
-    if (!release.available) { await enterLauncher(); return; }
-    element('#update-status').textContent = `${release.version} is available. Installed version: ${current}.`;
-    element('#update-release').hidden = false;
-  } catch {
-    if (revision !== updateRevision) return;
-    element('#update-status').textContent = 'Unable to check for updates. You can continue offline.';
-    element('#update-retry').hidden = false;
-  } finally { window.clearTimeout(timeout); }
-}
-bind('#update-continue', enterLauncher); bind('#update-retry', checkUpdates);
-bind('#update-release', () => invoke('open_release'));
 async function boot() {
   if (isTauri()) {
+    await updateWindowControls();
+    await getCurrentWindow().onResized(() => void perform(updateWindowControls));
     db = await invoke<Database>('load_workspace'); trayReady = await invoke('desktop_status');
     await listen<string>('native-action', event => void perform(async () => {
       const action = event.payload;
-      if (stage === 'updater' && action !== 'quit') return;
       if (action === 'open') await addProject(); else if (action === 'workspace') { await navigate('projects'); if (!projectId) newWorkspace(); } else if (action === 'save') await editor.save(); else if (action === 'quit') await quit(); else if (action === 'terminal') await terminals.start(project(), 'shell'); else if (['projects', 'git', 'docker'].includes(action)) await navigate(action as Page);
     }));
     window.setInterval(() => { if (document.visibilityState === 'visible') void editor.sync(); }, 3000);
     window.addEventListener('focus', () => { void editor.sync(); });
   } else element('#preview-banner').hidden = false;
   element('#status-text').textContent = isTauri() ? 'Local environment' : 'Preview';
-  updateEditorTitle(); refreshSidebar(); element<HTMLButtonElement>('#update-continue').disabled = false; await checkUpdates();
+  updateEditorTitle(); refreshSidebar(); await navigate('projects');
 }
-void boot().catch(error => { element('#startup-view').hidden = true; app.dataset.stage = 'launcher'; content.innerHTML = `<div class="empty-state"><h2>Unable to open workspaces.</h2><p>${html(String(error))}</p><p>Existing data has not been overwritten.</p></div>`; });
+void boot().catch(error => { app.dataset.stage = 'launcher'; content.innerHTML = `<div class="empty-state"><h2>Unable to open workspaces.</h2><p>${html(String(error))}</p><p>Existing data has not been overwritten.</p></div>`; });

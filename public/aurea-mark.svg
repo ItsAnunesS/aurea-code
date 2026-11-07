@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="102" y1="66" x2="406" y2="450" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9B6728"/>
+      <stop offset=".23" stop-color="#F7E2A0"/>
+      <stop offset=".46" stop-color="#C79745"/>
+      <stop offset=".7" stop-color="#F1D58B"/>
+      <stop offset="1" stop-color="#916025"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="112" y1="70" x2="400" y2="450" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF1C6"/>
+      <stop offset=".5" stop-color="#B88737"/>
+      <stop offset="1" stop-color="#F6DB95"/>
+    </linearGradient>
+    <radialGradient id="label" cx="0" cy="0" r="1" gradientTransform="translate(237 224) rotate(65) scale(98)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#353027"/>
+      <stop offset="1" stop-color="#17191B"/>
+    </radialGradient>
+    <mask id="spindle">
+      <path fill="white" d="M0 0h512v512H0z"/>
+      <circle cx="256" cy="256" r="9" fill="black"/>
+    </mask>
+  </defs>
+  <!-- The quiet outer ring suggests an aura around the record. -->
+  <circle cx="256" cy="256" r="234" stroke="#D9B668" stroke-opacity=".14" stroke-width="2"/>
+  <g mask="url(#spindle)">
+    <circle cx="256" cy="256" r="214" fill="url(#gold)"/>
+    <circle cx="256" cy="256" r="212.5" stroke="url(#rim)" stroke-width="3"/>
+    <g stroke="#68481E" stroke-opacity=".38" stroke-width="2">
+      <circle cx="256" cy="256" r="198"/>
+      <circle cx="256" cy="256" r="184"/>
+      <circle cx="256" cy="256" r="170"/>
+      <circle cx="256" cy="256" r="156"/>
+      <circle cx="256" cy="256" r="142"/>
+      <circle cx="256" cy="256" r="128"/>
+      <circle cx="256" cy="256" r="114"/>
+      <circle cx="256" cy="256" r="100"/>
+      <circle cx="256" cy="256" r="86"/>
+    </g>
+    <g stroke="#FFF0BD" stroke-opacity=".35" stroke-width="1.5">
+      <circle cx="256" cy="256" r="195"/>
+      <circle cx="256" cy="256" r="167"/>
+      <circle cx="256" cy="256" r="139"/>
+      <circle cx="256" cy="256" r="111"/>
+    </g>
+    <!-- Reflections follow the grooves rather than covering them. -->
+    <path d="M105 151a184 184 0 0 1 85-67M118 170a170 170 0 0 1 79-71M132 184a156 156 0 0 1 71-71" stroke="#FFF5CF" stroke-opacity=".7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M407 361a184 184 0 0 1-85 67M394 342a170 170 0 0 1-79 71" stroke="#FFF0BA" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="256" cy="256" r="69" fill="url(#label)" stroke="#F5D995" stroke-width="3"/>
+    <circle cx="256" cy="256" r="57" stroke="#B99550" stroke-opacity=".65" stroke-width="1.5"/>
+    <circle cx="256" cy="256" r="16" fill="url(#gold)"/>
+  </g>
+  <!-- A single glint keeps the aura idea understated at app-icon sizes. -->
+  <path d="M421 58c0 17 6 23 23 23-17 0-23 6-23 23 0-17-6-23-23-23 17 0 23-6 23-23Z" fill="#F8E6B1"/>
+</svg>

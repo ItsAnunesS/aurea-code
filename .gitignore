@@ -15,3 +15,6 @@ __pycache__/
 *.AppImage.zsync
 
 .ci-cache/
+
+# Local update signing material; never commit private keys.
+.aurea-signing/

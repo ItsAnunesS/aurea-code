@@ -1,5 +1,6 @@
 [package]
 name = "aurea-code"
+default-run = "aurea-code"
 version = "0.2.1"
 description = "Local IDE with workspaces, Codex, and Claude"
 authors = []
@@ -23,3 +24,7 @@ portable-pty = "0.9"
 uuid = { version = "1", features = ["v4"] }
 tempfile = "3"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
