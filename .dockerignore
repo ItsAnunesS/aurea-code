@@ -6,3 +6,5 @@ src-tauri/target
 .codex
 .aws
 artifacts
+
+.ci-cache/

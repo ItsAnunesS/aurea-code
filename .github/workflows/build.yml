@@ -11,37 +11,90 @@ concurrency:
   group: desktop-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  resolve:
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run_id: ${{ steps.build.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/check-version.mjs
+      - name: Find a verified build of this exact commit
+        id: build
+        uses: actions/github-script@v7
+        with:
+          script: await require('./scripts/find-release-build.cjs')({ github, context, core });
   linux:
+    needs: resolve
+    if: always() && (needs.resolve.result == 'skipped' || (needs.resolve.result == 'success' && needs.resolve.outputs.run_id == ''))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Build reproducible Linux environment
-        run: docker compose build dev
+      - uses: docker/setup-buildx-action@v3
+      - name: Restore Linux compiler and package caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .ci-cache/registry
+            .ci-cache/git
+            .ci-cache/target
+            !.ci-cache/target/release/bundle
+            .ci-cache/npm
+            .ci-cache/tauri
+          key: linux-rust-v1-${{ hashFiles('Dockerfile', 'compose.ci.yaml') }}-${{ hashFiles('src-tauri/Cargo.lock', 'package-lock.json') }}
+          restore-keys: linux-rust-v1-${{ hashFiles('Dockerfile', 'compose.ci.yaml') }}-
+      - name: Build cached Linux development and test environment
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ui-test
+          load: true
+          tags: |
+            aurea-code-dev:latest
+            aurea-code-ui-tests:latest
+          cache-from: type=gha,scope=aurea-linux-env
+          cache-to: type=gha,scope=aurea-linux-env,mode=max
       - name: Test and package AppImage with Gear Lever metadata
         run: >-
-          docker compose run --rm
+          docker compose -f compose.yaml -f compose.ci.yaml run --rm
           -e GITHUB_REF_TYPE -e GITHUB_REF_NAME
-          dev bash -c 'npm ci && node scripts/check-version.mjs && npm run check &&
+          dev bash -c 'npm ci && node scripts/check-version.mjs && npm test &&
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check &&
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings &&
           cargo test --locked --manifest-path src-tauri/Cargo.toml &&
           bash scripts/build-appimage.sh'
       - name: Exercise the desktop window in isolation
-        run: |
-          docker compose build ui-test
-          docker compose run --rm ui-test
+        run: docker compose -f compose.yaml -f compose.ci.yaml run --rm ui-test
       - uses: actions/upload-artifact@v4
         with:
           name: linux-x86_64
+          compression-level: 0
           path: |
             artifacts/*.AppImage
             artifacts/*.zsync
             artifacts/SHA256SUMS-linux.txt
           if-no-files-found: error
+      - name: Make container caches accessible to the runner
+        if: always()
+        run: if [ -d .ci-cache ]; then sudo chown -R "$(id -u):$(id -g)" .ci-cache; fi
   windows:
+    needs: resolve
+    if: always() && (needs.resolve.result == 'skipped' || (needs.resolve.result == 'success' && needs.resolve.outputs.run_id == ''))
     runs-on: windows-latest
+    env:
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,32 +107,53 @@ jobs:
         run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - name: Select Rust
         run: rustup default 1.99.1
+      - name: Restore Windows compiler and bundler caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+            !src-tauri/target/release/bundle
+            ~/AppData/Local/tauri
+          key: windows-rust-1.99.1-v1-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: windows-rust-1.99.1-v1-
       - run: npm ci
       - run: node scripts/check-version.mjs
-      - run: npm run check
+      - run: npm test
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Build EXE and MSI installers
-        run: npm run tauri -- build --bundles nsis,msi --ci -- --locked
+        run: |
+          if (Test-Path src-tauri/target/release/bundle) { Remove-Item src-tauri/target/release/bundle -Recurse -Force }
+          npm run tauri -- build --bundles nsis,msi --ci -- --locked
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x86_64
+          compression-level: 0
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
   release:
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
-    needs: [linux, windows]
+    if: >-
+      always() && startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push' &&
+      needs.resolve.result == 'success' &&
+      (needs.resolve.outputs.run_id != '' || (needs.linux.result == 'success' && needs.windows.result == 'success'))
+    needs: [resolve, linux, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: '*-x86_64'
           merge-multiple: true
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.resolve.outputs.run_id || github.run_id }}
       - name: Publish the complete versioned release
         env:
           GH_TOKEN: ${{ github.token }}

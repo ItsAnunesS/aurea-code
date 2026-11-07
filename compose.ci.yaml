@@ -1,0 +1,16 @@
+# Bind cache directories so GitHub Actions can restore them between runners.
+services:
+  dev:
+    environment:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    volumes:
+      - ./.ci-cache/registry:/usr/local/cargo/registry
+      - ./.ci-cache/git:/usr/local/cargo/git
+      - ./.ci-cache/target:/app/src-tauri/target
+      - ./.ci-cache/npm:/root/.npm
+      - ./.ci-cache/tauri:/root/.cache/tauri
+  ui-test:
+    volumes:
+      - ./.ci-cache/target:/app/src-tauri/target

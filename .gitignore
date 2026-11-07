@@ -13,3 +13,5 @@ __pycache__/
 # Generated AppImage outputs can also be emitted next to Cargo.toml.
 *.AppImage
 *.AppImage.zsync
+
+.ci-cache/

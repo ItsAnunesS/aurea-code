@@ -17,7 +17,8 @@ services:
     image: aurea-code-ui-tests:latest
     build:
       context: .
-      dockerfile: Dockerfile.ui-test
+      dockerfile: Dockerfile
+      target: ui-test
     working_dir: /app
     volumes:
       - .:/app
