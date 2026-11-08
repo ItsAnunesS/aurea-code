@@ -122,22 +122,21 @@ pub fn run() {
                     &PredefinedMenuItem::select_all(app, Some("Select All"))?,
                 ],
             )?;
-            let projects =
-                MenuItem::with_id(app, "projects", "Projects", true, Some("CmdOrCtrl+1"))?;
-            let git = MenuItem::with_id(app, "git", "Git", true, Some("CmdOrCtrl+2"))?;
-            let docker = MenuItem::with_id(app, "docker", "Docker", true, Some("CmdOrCtrl+3"))?;
+            let projects = MenuItem::with_id(app, "projects", "Projects", true, None::<&str>)?;
+            let git = MenuItem::with_id(app, "git", "Git", true, None::<&str>)?;
+            let docker = MenuItem::with_id(app, "docker", "Docker", true, None::<&str>)?;
             let terminal =
                 MenuItem::with_id(app, "terminal", "New terminal", true, Some("CmdOrCtrl+J"))?;
             let view_menu =
                 Submenu::with_items(app, "View", true, &[&projects, &git, &docker, &terminal])?;
+            // Linux/Windows use the custom title bar's popup menus. Registering a
+            // hidden native menubar lets the window toolkit show it again later.
+            #[cfg(target_os = "macos")]
             app.set_menu(Menu::with_items(
                 app,
                 &[&file_menu, &edit_menu, &view_menu],
             )?)?;
             app.manage(AppMenus([file_menu, edit_menu, view_menu]));
-            if let Some(window) = app.get_webview_window("main") {
-                window.hide_menu()?;
-            }
             app.on_menu_event(|app, event| action(app, event.id.as_ref()));
             let tray_show = MenuItem::with_id(app, "show", "Open Aurea Code", true, None::<&str>)?;
             let tray_quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;

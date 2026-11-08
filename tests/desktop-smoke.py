@@ -3,6 +3,7 @@
 Run only in an isolated container: the test creates a temporary project and workspace.
 """
 import base64
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -112,6 +113,46 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelector("#ide-navigation").hidden')
         assert execute('return document.querySelector("#preview-banner").hidden')
         assert execute('return document.documentElement.lang') == 'en'
+        # A native popup action restores/focuses the window. It must not reveal
+        # a second GTK menubar above the custom title bar.
+        def assert_no_native_menubar():
+            size = invoke('plugin:window|inner_size', {'label': 'main'})
+            viewport = execute('return {width:innerWidth * devicePixelRatio, height:innerHeight * devicePixelRatio}')
+            assert abs(size['height'] - viewport['height']) <= 1, (size, viewport)
+            assert abs(size['width'] - viewport['width']) <= 1, (size, viewport)
+
+        assert_no_native_menubar()
+        click('[data-menu="file"]')
+        # WebDriver key actions target WebKit, not GTK popup windows.
+        x11 = ctypes.CDLL('libX11.so.6')
+        xtest = ctypes.CDLL('libXtst.so.6')
+        x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        x11.XOpenDisplay.restype = ctypes.c_void_p
+        x11.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        x11.XKeysymToKeycode.restype = ctypes.c_uint
+        x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        xtest.XTestFakeKeyEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+        display = x11.XOpenDisplay(None)
+        assert display
+        try:
+            time.sleep(.2)
+            for keysym in [0xff50, 0xff54, 0xff0d]:  # Home, Down, Return
+                code = x11.XKeysymToKeycode(display, keysym)
+                xtest.XTestFakeKeyEvent(display, code, 1, 0)
+                xtest.XTestFakeKeyEvent(display, code, 0, 0)
+                x11.XSync(display, 0)
+                time.sleep(.1)
+        finally:
+            x11.XCloseDisplay(display)
+        wait_for('document.querySelector("#modal").open')
+        assert 'New workspace' in execute('return document.querySelector("#modal").textContent')
+        click('#modal-cancel')
+        assert_no_native_menubar()
+        click('#window-maximize')
+        assert_no_native_menubar()
+        click('#window-maximize')
+        assert_no_native_menubar()
         assert execute('return document.querySelector("#workspace-name").textContent') == 'Personal'
         assert execute('return document.querySelector("#add-project").textContent').strip() == 'Open folder'
         click('#new-workspace')
@@ -220,7 +261,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#status-file").textContent.includes("Python")')
         assert 'unsaved' in execute('return document.querySelector("#code-editor .cm-content").textContent')
         assert not (project / 'multi-a.txt').exists()
-        click('#save-file')
+        key('.file-sidebar', 's', True)
         wait_for('document.querySelectorAll(".tab-dirty:not([hidden])").length === 0')
         assert 'unsaved' in (project / 'renamed.py').read_text()
         # Shared document updates across groups; closing the second group preserves tabs.
@@ -489,7 +530,9 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelectorAll(".editor-tab").length === 0')
         click('.project-title')
         wait_for('document.querySelector("#start-shell")?.offsetParent !== null')
-        click('#start-shell')
+        click('.file-button[title="main.rs"]')
+        wait_for('document.querySelector("#code-editor .cm-content") !== null')
+        key('#code-editor .cm-content', 'j', True)
         wait_for('document.querySelector(".terminal-tab") !== null')
         terminal_count = execute('return document.querySelectorAll(".terminal-tab").length')
         click('#start-shell')
@@ -587,7 +630,7 @@ else: raise SystemExit('Unexpected mutation')
         screenshot = request('GET', f'/session/{SESSION}/screenshot')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-preview.png').write_bytes(base64.b64decode(screenshot))
-        print('Desktop smoke passed: independent launcher/IDE, light/dark appearance, stable navigation, terminal toggle, inline validation/cancel, workspaces, explorer multi-selection/clipboard/drag-drop/rename, editor groups/reordering/shared undo, PNG/WebP/SVG/PDF previews, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection, database queries/grid edits, Docker database command routing and tool detection.')
+        print('Desktop smoke passed: no native menubar after popup/restore, app shortcuts, independent launcher/IDE, light/dark appearance, stable navigation, terminal toggle, inline validation/cancel, workspaces, explorer multi-selection/clipboard/drag-drop/rename, editor groups/reordering/shared undo, PNG/WebP/SVG/PDF previews, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection, database queries/grid edits, Docker database command routing and tool detection.')
     except Exception:
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-failure.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))

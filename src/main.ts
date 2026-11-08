@@ -529,8 +529,18 @@ resizePanel(element('#group-resize'), element('.editor-groups'), '--primary-grou
 resizePanel(element('#explorer-resize'), app, '--explorer-width', 'aurea.explorer-width', 240, 160, () => Math.min(480, window.innerWidth * .4), 'x');
 resizePanel(element('#terminal-resize'), app, '--terminal-height', 'aurea.terminal-height', 240, 100, () => window.innerHeight * .65, 'y');
 window.addEventListener('keydown', event => {
-  if (!projectId || document.querySelector('dialog[open]')) return;
-  if (event.ctrlKey || event.metaKey) {
+  if (event.defaultPrevented || document.querySelector('dialog[open]')) return;
+  const modified = event.ctrlKey || event.metaKey;
+  // App shortcuts keep native-menu precedence over editor key bindings.
+  if (modified && !event.altKey && !event.shiftKey) {
+    const key = event.key.toLowerCase();
+    if (key === 'o') { event.preventDefault(); void perform(addProject); return; }
+    if (key === 'q') { event.preventDefault(); void perform(quit); return; }
+    if (key === 's') { event.preventDefault(); void perform(() => page === 'database' ? databaseView.saveSql() : editor.save()); return; }
+    if (key === 'j' && projectId) { event.preventDefault(); void perform(() => terminals.start(project(), 'shell')); return; }
+  }
+  if (!projectId) return;
+  if (modified) {
     if (event.key.toLowerCase() === 'p') { event.preventDefault(); void perform(event.shiftKey ? openCommands : openQuickFiles); }
     else if (event.key.toLowerCase() === 'b') { event.preventDefault(); toggleExplorer(); }
     else if (event.key === '\\') { event.preventDefault(); editor.split(); }
@@ -540,7 +550,7 @@ window.addEventListener('keydown', event => {
       event.preventDefault(); element<HTMLButtonElement>(`[data-group="${editor.activeGroup}"] .editor-tab.active .editor-tab-close`).click();
     }
   }
-});
+}, { capture: true });
 async function boot() {
   if (isTauri()) {
     await updateWindowControls();
