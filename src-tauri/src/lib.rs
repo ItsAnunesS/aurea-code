@@ -210,6 +210,7 @@ pub fn run() {
             files::create_file,
             files::transfer_entry,
             files::rename_entry,
+            files::delete_entry,
             files::create_folder,
             files::read_media,
             files::read_file,

@@ -162,6 +162,7 @@ The update source is fixed to `ItsAnunesS/aurea-code`; forks must update the sou
 ## MVP limitations
 
 - No semantic autocomplete/LSP, debugger, VS Code extensions, online collaboration, branch/remote management, or graphical Git conflict resolution. Use the terminal for advanced operations.
+- Use **Delete…** in the explorer context menu or press **Delete** to permanently remove selected files/folders after confirmation. Save or close unsaved files first. Deletion closes affected saved tabs and rejects the project root, protected `.git` contents, and symbolic links.
 - The explorer hides `.git`, `node_modules`, `target`, and symbolic links. Binary editing is unsupported. Synchronization follows the open file; refresh the explorer to reload its tree.
 - Git and Docker commands use separate arguments without shell interpolation. UI commands are restricted to the implemented operations. Interactive terminals retain normal execution capabilities and user permissions. Only open trusted projects: configuration, hooks, and Compose can execute code.
 - Closing a terminal stops its main process. Docker services and deliberately detached processes may keep running. Save-conflict detection is not a distributed lock against concurrent external writers.

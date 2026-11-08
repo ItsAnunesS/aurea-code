@@ -141,6 +141,19 @@ export class CodeEditor {
   async rename(projectId: string, source: string, name: string) {
     return this.mutate(projectId, source, () => invoke<string>('rename_entry', { projectId, source, name }), true);
   }
+  async delete(projectId: string, source: string) {
+    if (this.transferring || this.saving) throw new Error('Wait for the current file operation to finish.');
+    const affected = this.tabs.filter(tab => tab.projectId === projectId && movedPath(tab.path, source, '') !== tab.path);
+    if (affected.some(tab => this.isDirty(tab))) throw new Error('Save or close unsaved files in this selection before deleting.');
+    this.transferring = true; this.revisions = this.revisions.map(value => value + 1);
+    try {
+      await invoke('delete_entry', { projectId, relative: source });
+      for (const tab of affected) {
+        if (this.isDirty(tab)) { this.report(`Deleted ${tab.path} from disk; edits made during deletion remain open. Copy them to a new file to keep them.`); continue; }
+        this.groups.forEach((_, index) => this.closeTab(tab, index));
+      }
+    } finally { this.transferring = false; }
+  }
   private async mutate(projectId: string, source: string, operation: () => Promise<string>, remap: boolean) {
     if (this.transferring || this.saving) throw new Error('Wait for the current save or transfer to finish.');
     this.transferring = true; this.revisions = this.revisions.map(value => value + 1);

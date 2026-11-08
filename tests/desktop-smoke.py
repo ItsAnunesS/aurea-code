@@ -601,18 +601,51 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector(".git-stash-row") !== null')
         click('.git-stash-row button:first-child')
         wait_for('document.querySelector("#git-output")?.textContent.includes("saved stash contents")')
-        def confirm_native():
+        def confirm_native(keysym=0xff0d):
             display = x11.XOpenDisplay(None)
             assert display
             try:
                 time.sleep(.2)
-                code = x11.XKeysymToKeycode(display, 0xff0d)
+                code = x11.XKeysymToKeycode(display, keysym)
                 xtest.XTestFakeKeyEvent(display, code, 1, 0)
                 xtest.XTestFakeKeyEvent(display, code, 0, 0)
                 x11.XSync(display, 0)
                 time.sleep(.2)
             finally:
                 x11.XCloseDisplay(display)
+
+        # Deletion is explicit, cancellable, and closes tabs only after success.
+        (project / 'delete-me.txt').write_text('temporary')
+        (project / 'delete-folder').mkdir()
+        (project / 'delete-folder' / 'nested.txt').write_text('nested')
+        click('[data-page="editor"]')
+        click('#refresh-files')
+        wait_for("""document.querySelector('.file-button[title="delete-me.txt"]') !== null""")
+        click('.file-button[title="delete-me.txt"]')
+        execute("""document.querySelector('.file-button[title="delete-me.txt"]').dispatchEvent(new MouseEvent("contextmenu", {bubbles:true, clientX:100, clientY:200}));""")
+        execute('setTimeout(() => [...document.querySelectorAll(".context-menu button")].find(button => button.textContent.startsWith("Delete…")).click(), 0);')
+        confirm_native(0xff1b)
+        assert (project / 'delete-me.txt').exists()
+        input_text('#code-editor .cm-content', 'unsaved ')
+        execute("""setTimeout(() => document.querySelector('.file-button[title="delete-me.txt"]').dispatchEvent(new KeyboardEvent("keydown", {key:"Delete", bubbles:true})), 0);""")
+        confirm_native()
+        wait_for('document.querySelector("#toast").textContent.includes("Save or close unsaved files")')
+        assert (project / 'delete-me.txt').exists()
+        assert 'unsaved' in execute('return document.querySelector("#code-editor .cm-content").textContent')
+        click('#save-file')
+        wait_for('document.querySelectorAll(".tab-dirty:not([hidden])").length === 0')
+        execute("""setTimeout(() => document.querySelector('.file-button[title="delete-me.txt"]').dispatchEvent(new KeyboardEvent("keydown", {key:"Delete", bubbles:true})), 0);""")
+        confirm_native()
+        wait_for("""document.querySelector('.file-button[title="delete-me.txt"]') === null""")
+        assert not (project / 'delete-me.txt').exists()
+        assert not execute('return [...document.querySelectorAll(".editor-tab")].some(tab => tab.textContent.includes("delete-me.txt"))')
+        execute("""const row = document.querySelector('[data-entry-path="delete-folder"]'); row.dispatchEvent(new MouseEvent("contextmenu", {bubbles:true, clientX:100, clientY:200})); setTimeout(() => [...document.querySelectorAll(".context-menu button")].find(button => button.textContent.startsWith("Delete…")).click(), 0);""")
+        confirm_native()
+        wait_for("""document.querySelector('[data-entry-path="delete-folder"]') === null""")
+        assert not (project / 'delete-folder').exists()
+        click('[data-page="git"]')
+        wait_for('document.querySelector(".git-segments") !== null')
+
 
         # Global identity is written only to the isolated test configuration file.
         execute("[...document.querySelectorAll('.git-segments button')].find(b=>b.textContent.startsWith('Settings')).click();")

@@ -4,6 +4,7 @@ import { showContextMenu } from './context-menu';
 
 interface ExplorerActions {
   transfer: (entries: FileEntry[], destination: string, copy: boolean) => Promise<void>;
+  delete: (entries: FileEntry[]) => void;
   rename: (entry: FileEntry) => void;
   create: (parent: string, folder: boolean) => void;
   open: (entry: FileEntry, side: boolean) => void;
@@ -81,6 +82,7 @@ export class ExplorerSelection {
       { label: 'Cut', shortcut: 'Ctrl+X', disabled: !entries.length, run: () => this.copy(false) },
       { label: 'Copy', shortcut: 'Ctrl+C', disabled: !entries.length, run: () => this.copy(true) },
       { label: 'Paste', shortcut: 'Ctrl+V', disabled: !this.clipboard || this.pasting, run: () => void this.paste(destination) },
+      { label: 'Delete…', shortcut: 'Delete', disabled: !entries.length, run: () => this.actions.delete(entries) },
       { label: 'Rename…', shortcut: 'F2', disabled: !single, run: () => single && this.actions.rename(single) },
     ], restore);
   }
@@ -93,6 +95,7 @@ export class ExplorerSelection {
       if (key === 'a') { this.selected.clear(); for (const row of this.rows()) this.selected.set(row.dataset.entryPath!, this.entry(row)); this.paint(); }
       else if (key === 'v') void this.paste(this.destination()); else this.copy(key === 'c');
     } else if (event.key === 'F2' && entries.length === 1) { event.preventDefault(); this.actions.rename(entries[0]); }
+    else if (event.key === 'Delete' && entries.length && !mod && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); this.actions.delete(entries); }
     else if (event.key === 'Escape') { this.clipboard = undefined; this.selected.clear(); this.paint(); }
     else if (event.key === 'Enter' && entries.length === 1 && !entries[0].directory) { event.preventDefault(); this.actions.open(entries[0], mod); }
     else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {

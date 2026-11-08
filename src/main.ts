@@ -218,6 +218,27 @@ function remapExplorer(source: string, destination: string) {
   for (const path of [...expandedFolders]) { expandedFolders.delete(path); expandedFolders.add(movedPath(path, source, destination)); }
   explorerSelection.remap(source, destination);
 }
+let deletingEntries = false;
+async function deleteEntries(entries: FileEntry[]) {
+  if (!entries.length || deletingEntries) return;
+  const id = projectId;
+  deletingEntries = true;
+  let completed = 0;
+  try {
+    const names = entries.slice(0, 10).map(entry => entry.path).join('\n');
+    if (!await confirm(`Permanently delete ${entries.length} item(s)?\n\n${names}${entries.length > 10 ? '\n…' : ''}\n\nFolders include all their contents. This cannot be undone.`, { title: 'Delete files and folders', kind: 'warning', okLabel: 'Delete permanently', cancelLabel: 'Cancel' })) return;
+    if (id !== projectId) return;
+    for (const entry of entries) {
+      await editor.delete(id, entry.path); completed++;
+      for (const path of expandedFolders) if (movedPath(path, entry.path, '') !== path) expandedFolders.delete(path);
+    }
+    notify(`${completed} item(s) deleted.`);
+  } catch (error) { notify(`${completed} of ${entries.length} item(s) deleted. ${String(error)}`); }
+  finally {
+    deletingEntries = false;
+    if (completed && id === projectId) { explorerSelection.remap('', ''); await renderTree(); }
+  }
+}
 function renameEntry(entry: FileEntry) {
   const id = projectId;
   editName(element('#file-tree'), entry.name, `Rename ${entry.name}`, async name => {
@@ -235,7 +256,7 @@ function createEntry(parent: string, folder: boolean) {
   });
 }
 const explorerSelection = new ExplorerSelection(element('.file-sidebar'), {
-  transfer: transferEntries, rename: renameEntry, create: createEntry, report: notify,
+  transfer: transferEntries, delete: entries => void perform(() => deleteEntries(entries)), rename: renameEntry, create: createEntry, report: notify,
   open: (entry, side) => void perform(() => editor.open(projectId, entry.path, true, false, side ? 1 : editor.activeGroup)),
 });
 const explorerDrag = new ExplorerDrag((entries, destination, copy) => perform(() => transferEntries(entries, destination, copy)), entry => explorerSelection.forDrag(entry));

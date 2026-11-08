@@ -323,6 +323,53 @@ fn validate_name(name: &str) -> Result<()> {
     }
     Ok(())
 }
+fn inspect_deletion(path: &Path, count: &mut usize, depth: usize) -> Result<()> {
+    *count += 1;
+    if *count > 100_000 || depth > 100 {
+        return Err("Deletion exceeds 100,000 entries or 100 folder levels.".into());
+    }
+    let metadata = fs::symlink_metadata(path).map_err(error)?;
+    if metadata.file_type().is_symlink() || (!metadata.is_file() && !metadata.is_dir()) {
+        return Err("Deletion cannot include symbolic links or special files.".into());
+    }
+    if path.file_name().is_some_and(|name| {
+        name.to_string_lossy()
+            .trim_end_matches(['.', ' '])
+            .eq_ignore_ascii_case(".git")
+    }) {
+        return Err("Deletion cannot include protected .git folders.".into());
+    }
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path).map_err(error)? {
+            inspect_deletion(&entry.map_err(error)?.path(), count, depth + 1)?;
+        }
+    }
+    Ok(())
+}
+pub fn delete_path(root: &Path, relative: &str) -> Result<()> {
+    let path = scoped_path(root, relative)?;
+    if path == root.canonicalize().map_err(error)? {
+        return Err("The project root cannot be deleted.".into());
+    }
+    inspect_deletion(&path, &mut 0, 0)?;
+    if path.is_dir() {
+        fs::remove_dir_all(path).map_err(error)
+    } else {
+        fs::remove_file(path).map_err(error)
+    }
+}
+#[tauri::command]
+pub async fn delete_entry(
+    store: tauri::State<'_, Store>,
+    project_id: String,
+    relative: String,
+) -> Result<()> {
+    let root = store.project(&project_id)?.path;
+    tauri::async_runtime::spawn_blocking(move || delete_path(&root, &relative))
+        .await
+        .map_err(error)?
+}
+
 pub fn rename_path(root: &Path, source: &str, name: &str) -> Result<String> {
     validate_name(name)?;
     if source.is_empty() {
@@ -402,6 +449,38 @@ pub async fn read_media(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn deletes_files_and_folders_but_preserves_protected_paths() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        fs::create_dir_all(root.join("folder/nested")).unwrap();
+        fs::write(root.join("folder/nested/file.txt"), "contents").unwrap();
+        fs::write(root.join("keep.txt"), "keep").unwrap();
+        assert!(delete_path(root, "").is_err());
+        assert!(delete_path(root, "../outside").is_err());
+        fs::create_dir_all(root.join("repository/.git")).unwrap();
+        assert!(delete_path(root, "repository/.git").is_err());
+        assert!(delete_path(root, "repository").is_err());
+        assert!(root.join("repository/.git").exists());
+        delete_path(root, "folder").unwrap();
+        assert!(!root.join("folder").exists());
+        assert_eq!(fs::read_to_string(root.join("keep.txt")).unwrap(), "keep");
+        delete_path(root, "keep.txt").unwrap();
+        assert!(delete_path(root, "keep.txt").is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn deletion_rejects_nested_symlinks_without_touching_targets() {
+        let directory = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("keep.txt"), "keep").unwrap();
+        fs::create_dir(directory.path().join("folder")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), directory.path().join("folder/link")).unwrap();
+        assert!(delete_path(directory.path(), "folder/link").is_err());
+        assert!(delete_path(directory.path(), "folder").is_err());
+        assert!(outside.path().join("keep.txt").exists());
+        assert!(directory.path().join("folder/link").exists());
+    }
     #[test]
     fn rename_preserves_data_and_rejects_invalid_names_and_collisions() {
         let directory = tempfile::tempdir().unwrap();
