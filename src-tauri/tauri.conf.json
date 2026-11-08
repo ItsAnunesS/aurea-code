@@ -39,7 +39,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCOEZCMzNFOUQ5MkE0M0YKUldRL3BKS2RQck9QUy9sMVBvLzZJZmkyditHTlVva29jMjVFSUd6aHRDZ0Z2c1hURWptNFRyVGoK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMyNDZCODQ0OEY5OEU1MEIKUldRTDVaaVBSTGhHTWl3akp3aGF6a3c1ZEwreUsxaUFnczdiMThGSm12N3JtMlpZWmZlVFFZT2wK",
       "endpoints": [
         "https://github.com/ItsAnunesS/aurea-code/releases/latest/download/latest.json"
       ],

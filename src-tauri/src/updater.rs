@@ -225,9 +225,11 @@ mod tests {
             .plugin(tauri_plugin_updater::Builder::new().build())
             .build(context)
             .unwrap();
+        // Keep the signed fixture independent of production signing key rotation.
+        let fixture_public_key = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCOEZCMzNFOUQ5MkE0M0YKUldRL3BKS2RQck9QUy9sMVBvLzZJZmkyditHTlVva29jMjVFSUd6aHRDZ0Z2c1hURWptNFRyVGoK";
         let updater = app
             .updater_builder()
-            .pubkey(config["plugins"]["updater"]["pubkey"].as_str().unwrap())
+            .pubkey(fixture_public_key)
             .endpoints(vec!["https://example.invalid/latest.json".parse().unwrap()])
             .unwrap()
             .target("linux-x86_64")
