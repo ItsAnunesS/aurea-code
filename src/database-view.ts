@@ -27,6 +27,8 @@ export class DatabaseView {
   private sqlEditor?: EditorView;
   private modal = document.createElement('dialog');
   private structure = false;
+  private connected = false;
+  private queryVisible = false;
   private sorting?: { index: number; descending: boolean };
   busy = false;
   private sqlDirty = false;
@@ -34,20 +36,23 @@ export class DatabaseView {
   private get pendingEdits() { return this.changes.size > 0; }
   constructor(private host: HTMLElement, private notify: (message: string) => void, private tool: (request: DatabaseTool) => Promise<void>) {
     this.modal.id = 'database-modal'; document.body.append(this.modal);
-    host.innerHTML = `<aside class="db-sidebar"><div class="db-heading"><strong>DATABASES</strong><button id="db-new" title="New connection" aria-label="New database connection">+</button></div>
-      <select id="db-connections" aria-label="Database connection"><option value="">Choose a connection</option></select>
-      <div class="db-connection-actions"><button id="db-connect">Connect</button><button id="db-edit">Edit</button><button id="db-remove">Remove</button></div>
-      <input id="db-filter-tables" placeholder="Filter tables…" aria-label="Filter tables"><div id="db-tree"><p>Add a connection to explore its schemas.</p></div>
-      <div class="db-bottom"><button id="db-tools">Clients & versions</button><button id="db-docker">Connect Docker container</button><button id="db-create">Create Docker server</button></div></aside>
-      <div class="db-workspace"><header class="db-workspace-header"><div><strong id="db-title">Database workspace</strong><small id="db-subtitle">PostgreSQL · MySQL · MariaDB · SQLite</small></div><span id="db-engine" class="badge">Not connected</span></header>
-      <div class="db-query-toolbar"><strong>SQL console</strong><span>Ctrl Enter · selection or script</span><button id="db-save-sql" class="small-button">Save SQL as…</button><button id="db-run" class="primary-button">▶ Run SQL</button><button id="db-cancel" class="small-button" disabled>Cancel</button></div>
-      <div id="db-sql"></div><div class="db-query-note">Each run opens a new session. Include transactions in one script; statements may commit immediately. Results: 500 rows per statement; 30-second timeout.</div>
-      <div class="db-result-toolbar"><button id="db-data" class="active">Data</button><button id="db-structure">Columns</button><select id="db-result-set" aria-label="Result set" hidden></select><span id="db-result-label">No results</span><button id="db-refresh">Reload</button><button id="db-apply" disabled>Apply changes</button><button id="db-revert" disabled>Revert</button><button id="db-export">Export CSV</button></div>
-      <div id="db-results" tabindex="0" aria-label="Database results"><div class="db-empty"><h2>Your data, in focus.</h2><p>Connect a database, browse a table, or run a query.</p></div></div>
-      <footer class="db-footer"><span id="db-status" role="status">Ready</span><button id="db-previous" disabled>← Previous</button><span id="db-page"></span><button id="db-next" disabled>Next →</button></footer></div>`;
+    host.innerHTML = `<aside class="db-sidebar"><div class="db-heading"><strong>CONNECTIONS</strong><button id="db-new" title="New connection" aria-label="New database connection">+</button></div>
+      <div class="db-connection-card"><select id="db-connections" aria-label="Database connection"><option value="">Choose a connection</option></select>
+      <div class="db-connection-actions"><span id="db-connection-state">Not connected</span><button id="db-connect">Connect</button><details class="db-menu"><summary aria-label="Connection options" title="Connection options">⋯</summary><div><button id="db-edit">Edit connection</button><button id="db-remove">Remove connection</button></div></details></div></div>
+      <div class="db-heading db-tables-heading"><strong>TABLES & VIEWS</strong><span id="db-table-count">0</span></div>
+      <input id="db-filter-tables" placeholder="Find a table…" aria-label="Filter tables"><div id="db-tree"></div>
+      <details class="db-bottom"><summary>Database tools</summary><div><button id="db-docker">Connect Docker container</button><button id="db-create">Create Docker server</button><button id="db-tools">Clients & versions</button></div></details></aside>
+      <div class="db-workspace"><header class="db-workspace-header"><div class="db-identity"><span class="db-eyebrow" id="db-subtitle">Explore your project data</span><strong id="db-title">Database workspace</strong></div><span id="db-engine" class="badge">Not connected</span><button id="db-toggle-sql" class="small-button" aria-expanded="false" aria-controls="db-query-panel">SQL editor</button></header>
+      <section id="db-query-panel" aria-label="SQL editor" hidden><div class="db-query-toolbar"><strong>Query</strong><span>Ctrl Enter to run selection or script</span><button id="db-save-sql" class="small-button">Save SQL as…</button><button id="db-run" class="primary-button">▶ Run SQL</button><button id="db-cancel" class="small-button" disabled>Cancel</button></div>
+      <div id="db-sql"></div><details class="db-query-note"><summary>Each run is a new session · changes may commit immediately</summary><p>Include transactions in one script. Results are limited to 500 rows per statement, with a 30-second timeout.</p></details></section>
+      <div class="db-result-toolbar"><div class="db-result-tabs"><button id="db-data" class="active" aria-pressed="true">Data</button><button id="db-structure" aria-pressed="false">Structure</button></div><select id="db-result-set" aria-label="Result set" hidden></select><span id="db-result-label">No results</span><button id="db-refresh" title="Reload current table or schema">↻ Refresh</button><button id="db-export">Export CSV</button></div>
+      <div id="db-pending" hidden><span id="db-pending-label" role="status"></span><button id="db-revert">Discard edits</button><button id="db-apply" class="primary-button">Apply changes</button></div>
+      <div id="db-results" tabindex="0" aria-label="Database results"></div>
+      <footer class="db-footer"><span id="db-status" role="status">Ready</span><div id="db-pagination" hidden><button id="db-previous" disabled>← Previous</button><span id="db-page"></span><button id="db-next" disabled>Next →</button></div></footer></div>`;
     const bind = (selector: string, action: () => Promise<unknown> | unknown) => {
-      this.el<HTMLButtonElement>(selector).onclick = () => { if (!this.busy || selector === '#db-cancel') void this.perform(action); };
+      this.el<HTMLButtonElement>(selector).onclick = () => { if (!this.busy || selector === '#db-cancel') { this.el<HTMLDetailsElement>('.db-menu').open = false; void this.perform(action); } };
     };
+    bind('#db-toggle-sql', () => this.showQuery(!this.queryVisible));
     bind('#db-new', () => this.connectionForm());
     bind('#db-edit', () => this.connection && this.connectionForm(this.connection));
     bind('#db-remove', () => this.removeConnection());
@@ -69,11 +74,27 @@ export class DatabaseView {
     this.el<HTMLSelectElement>('#db-connections').onchange = () => void this.perform(async () => {
       const selected = this.el<HTMLSelectElement>('#db-connections').value;
       if (this.busy || !await this.discard()) { this.renderConnections(); return; }
-      this.connection = this.connections.find(c => c.id === selected); this.renderConnections(); this.clearResults(); this.tables = []; this.renderTree();
-      this.status('Connection selected. Click Connect to refresh its schema.');
+      this.connection = this.connections.find(c => c.id === selected); this.connected = false; this.renderConnections(); this.clearResults(); this.tables = []; this.renderTree();
+      this.el<HTMLInputElement>('#db-filter-tables').value = '';
+      if (this.connection) await this.connect(); else this.status('Choose or add a connection.');
     });
     this.el<HTMLInputElement>('#db-filter-tables').oninput = () => this.renderTree();
     this.el<HTMLSelectElement>('#db-result-set').onchange = () => { this.result = this.sets[Number(this.el<HTMLSelectElement>('#db-result-set').value)]; this.sorting = undefined; this.renderResult(); };
+  }
+  private showQuery(visible: boolean) {
+    this.queryVisible = visible;
+    this.el('#db-query-panel').hidden = !visible;
+    this.el('#db-toggle-sql').setAttribute('aria-expanded', String(visible));
+    this.el('#db-toggle-sql').classList.toggle('active', visible);
+    if (visible) { this.sqlEditor?.requestMeasure(); this.sqlEditor?.focus(); }
+  }
+  private updateControls() {
+    for (const id of ['db-connect', 'db-edit', 'db-remove', 'db-run', 'db-refresh']) this.el<HTMLButtonElement>(`#${id}`).disabled = this.busy || !this.connection;
+    this.el<HTMLButtonElement>('#db-export').disabled = this.busy || !this.result.columns.length || this.pendingEdits;
+    this.el<HTMLSelectElement>('#db-connections').disabled = this.busy;
+    this.el('#db-connection-state').textContent = this.connected ? 'Connected' : 'Not connected';
+    this.el('#db-connection-state').classList.toggle('connected', this.connected);
+    this.el('#db-connect').textContent = this.connected ? 'Reconnect' : 'Connect';
   }
   private el<T extends HTMLElement = HTMLElement>(selector: string) { return this.host.querySelector<T>(selector)!; }
   private args() { if (!this.project || !this.connection) throw new Error('Choose a database connection first.'); return { projectId: this.project.id, connectionId: this.connection.id }; }
@@ -81,19 +102,20 @@ export class DatabaseView {
   private async perform(action: () => Promise<unknown> | unknown) { try { await action(); } catch (error) { this.status(String(error)); this.notify(String(error)); } }
   private async operation<T>(label: string, action: () => Promise<T>, cancellable = false) {
     if (this.busy) throw new Error('Wait for the current database operation.');
-    this.busy = true; this.status(label);
+    this.busy = true; this.status(label); this.updateControls(); this.el('#db-results').setAttribute('aria-busy', 'true');
     this.el<HTMLButtonElement>('#db-cancel').disabled = !cancellable;
     this.host.classList.add('db-busy');
-    try { return await action(); } finally { this.busy = false; this.host.classList.remove('db-busy'); this.el<HTMLButtonElement>('#db-cancel').disabled = true; }
+    try { return await action(); } finally { this.busy = false; this.updateControls(); this.el('#db-results').setAttribute('aria-busy', 'false'); this.host.classList.remove('db-busy'); this.el<HTMLButtonElement>('#db-cancel').disabled = true; }
   }
   async activate(project: Project) {
     if (this.project?.id === project.id) { this.sqlEditor?.requestMeasure(); return; }
+    this.connected = false; this.showQuery(false); this.el<HTMLInputElement>('#db-filter-tables').value = '';
     this.project = project; const revision = ++this.revision; this.connection = undefined; this.tables = []; this.clearResults();
     this.sqlEditor?.destroy(); this.sqlDirty = false;
     const language = await languageFor('query.sql')?.load();
     if (revision !== this.revision) return;
     this.sqlEditor = new EditorView({ parent: this.el('#db-sql'), state: EditorState.create({ doc: '-- Write SQL here, or open a table in the explorer.\n', extensions: [basicSetup, editorAppearance(), language ?? [], EditorView.lineWrapping, EditorView.updateListener.of(update => { if (update.docChanged) this.sqlDirty = true; }), keymap.of([{ key: 'Mod-s', run: () => { void this.perform(() => this.saveSql()); return true; } },{ key: 'Mod-Enter', run: () => { if (!this.busy) void this.perform(() => this.run()); return true; } }]), EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { fontFamily: 'Consolas, monospace', fontSize: '12px' } })] }) });
-    await this.refreshConnections(); this.renderTree();
+    await this.refreshConnections(); this.renderTree(); this.renderResult();
   }
   reset() { this.revision++; this.project = undefined; this.connection = undefined; this.changes.clear(); this.sqlEditor?.destroy(); this.sqlEditor = undefined; this.sqlDirty = false; }
   private async refreshConnections() {
@@ -111,6 +133,7 @@ export class DatabaseView {
     this.el('#db-title').textContent = this.connection?.name ?? 'Database workspace';
     this.el('#db-subtitle').textContent = this.connection ? (this.connection.engine === 'sqlite' ? this.connection.database : `${this.connection.host}:${this.connection.port} / ${this.connection.database}`) : 'Choose a connection';
     this.el('#db-engine').textContent = this.connection?.engine ?? 'Not connected';
+    this.updateControls();
   }
   private clearResults() {
     this.table = undefined; this.columns = []; this.changes.clear(); this.editable = false; this.sorting = undefined; this.sets = []; this.offset = 0;
@@ -162,12 +185,13 @@ export class DatabaseView {
     if (!this.connection || !await this.discard()) return;
     if (!await this.form('Remove connection?', `<p>Remove ${html(this.connection.name)} and its saved credential? The database and containers are kept.</p>`, 'Remove')) return;
     await this.operation('Removing connection…', () => invoke('db_remove_connection', this.args()));
-    this.connection = undefined; this.tables = []; this.clearResults(); await this.refreshConnections(); this.renderTree(); this.status('Connection removed.');
+    this.connection = undefined; this.connected = false; this.tables = []; this.clearResults(); await this.refreshConnections(); this.renderTree(); this.renderResult(); this.status('Connection removed.');
   }
   private async connect() {
     if (!await this.discard()) return;
+    this.connected = false; this.tables = []; this.clearResults(); this.renderTree(); this.updateControls();
     this.tables = await this.operation('Connecting and discovering schema…', () => invoke<DbTable[]>('db_tables', this.args()));
-    this.clearResults(); this.renderTree();
+    this.connected = true; this.clearResults(); this.renderTree(); this.updateControls();
     this.el('#db-title').textContent = this.connection!.name;
     this.el('#db-subtitle').textContent = this.connection!.engine === 'sqlite' ? this.connection!.database : `${this.connection!.host}:${this.connection!.port} / ${this.connection!.database}`;
     this.el('#db-engine').textContent = this.connection!.engine;
@@ -175,6 +199,7 @@ export class DatabaseView {
   }
   private renderTree() {
     const host = this.el('#db-tree'); host.replaceChildren();
+    this.el('#db-table-count').textContent = String(this.tables.length);
     const query = this.el<HTMLInputElement>('#db-filter-tables').value.toLowerCase();
     const groups = new Map<string, DbTable[]>();
     for (const table of this.tables.filter(t => `${t.schema}.${t.name}`.toLowerCase().includes(query))) groups.set(table.schema, [...(groups.get(table.schema) ?? []), table]);
@@ -185,23 +210,21 @@ export class DatabaseView {
         const button = document.createElement('button'); button.className = 'db-table'; button.textContent = `${table.kind === 'view' ? '◇' : '▦'}  ${table.name}`; button.title = `${schema}.${table.name}`;
         const selected = this.table?.schema === schema && this.table?.name === table.name; button.classList.toggle('active', selected);
         button.onclick = () => { if (!this.busy) void this.perform(async () => { if (await this.discard()) await this.loadTable(table, 0); }); }; group.append(button);
-        if (selected) for (const column of this.columns) {
-          const item = document.createElement('div'); item.className = 'db-tree-column'; item.textContent = `${column.primary_key ? '⚿ ' : ''}${column.name}`;
-          const type = document.createElement('small'); type.textContent = column.data_type; item.append(type); group.append(item);
-        }
+
       }
       host.append(group);
     }
-    if (!groups.size) { const empty = document.createElement('p'); empty.textContent = this.connection ? 'Connect or refresh to discover tables.' : 'Add a connection to explore its schemas.'; host.append(empty); }
+    if (!groups.size) { const empty = document.createElement('p'); empty.textContent = query && this.tables.length ? 'No tables match your search.' : this.connected ? 'No tables or views in this database.' : this.connection ? 'Connect to browse tables and views.' : 'Your saved connections will appear here.'; host.append(empty); }
   }
   private async loadTable(table: DbTable, offset: number) {
     const data = await this.operation('Loading table…', () => invoke<TableData>('db_table', { ...this.args(), table, offset }));
     this.table = table; this.offset = offset; this.columns = data.columns; this.result = data.data; this.result.columns = data.columns.map(c => c.name);
     this.editable = data.editable; this.structure = false; this.sorting = undefined; this.changes.clear(); this.el('#db-result-set').hidden = true;
-    this.renderTree(); this.renderResult(); this.status(data.editable ? 'Double-click a cell to stage an edit. Apply changes to commit.' : 'Read-only grid: views and tables without a supported primary key can be queried in SQL.');
+    this.showQuery(false); this.renderTree(); this.renderResult(); this.status(data.editable ? 'Double-click a cell to stage an edit. Apply changes to commit.' : 'Read-only grid: views and tables without a supported primary key can be queried in SQL.');
   }
   private async run() {
     if (!this.sqlEditor || !await this.discard()) return;
+    this.showQuery(true);
     const selection = this.sqlEditor.state.selection.main;
     const sql = selection.empty ? this.sqlEditor.state.doc.toString() : this.sqlEditor.state.sliceDoc(selection.from, selection.to);
     const start = performance.now();
@@ -214,6 +237,14 @@ export class DatabaseView {
   }
   private renderResult() {
     const host = this.el('#db-results'); host.replaceChildren();
+    this.updateControls();
+    this.el('#db-pending').hidden = !this.pendingEdits;
+    this.el('#db-pending-label').textContent = `${this.changes.size} row${this.changes.size === 1 ? '' : 's'} with unsaved edits`;
+    this.el('#db-pagination').hidden = !this.table;
+    this.el('#db-title').textContent = this.table?.name ?? (this.sets.length ? 'Query results' : this.connection?.name ?? 'Database workspace');
+    this.el('#db-subtitle').textContent = this.table ? `${this.connection?.name} / ${this.table.schema}` : this.connection ? `${this.connection.name} / ${this.connection.database}` : 'Explore your project data';
+    this.el('#db-data').setAttribute('aria-pressed', String(!this.structure));
+    this.el('#db-structure').setAttribute('aria-pressed', String(this.structure));
     this.el('#db-data').classList.toggle('active', !this.structure); this.el('#db-structure').classList.toggle('active', this.structure);
     this.el<HTMLButtonElement>('#db-apply').disabled = !this.pendingEdits;
     this.el<HTMLButtonElement>('#db-revert').disabled = !this.pendingEdits;
@@ -221,7 +252,7 @@ export class DatabaseView {
     this.el<HTMLButtonElement>('#db-previous').disabled = !this.table || this.offset === 0;
     this.el<HTMLButtonElement>('#db-next').disabled = !this.table || this.result.rows.length < 200;
     this.el('#db-page').textContent = this.table ? (this.result.rows.length ? `${this.offset + 1}–${this.offset + this.result.rows.length}` : 'No rows on this page') : '';
-    this.el('#db-result-label').textContent = `${this.table ? this.table.schema + '.' + this.table.name + ' · ' : ''}${this.result.rows.length} rows · ${this.result.affected} affected${this.result.truncated ? ' · truncated' : ''}${this.pendingEdits ? ' · ' + this.changes.size + ' pending rows' : ''}`;
+    this.el('#db-result-label').textContent = this.table ? `${this.result.rows.length} rows on this page${this.editable ? '' : ' · Read only'}` : this.sets.length ? `${this.result.rows.length} rows · ${this.result.affected} affected${this.result.truncated ? ' · Limit reached' : ''}` : 'Table browser';
     const table = document.createElement('table'); table.className = 'db-grid';
     const head = table.createTHead().insertRow();
     const names = this.structure ? ['Column', 'Type', 'Primary key', 'Nullable', 'Editable'] : this.result.columns;
@@ -255,7 +286,18 @@ export class DatabaseView {
       }
     }
     if (names.length) host.append(table);
-    else { const empty = document.createElement('div'); empty.className = 'db-empty'; empty.textContent = this.connection ? 'No rows to display. Open a table or execute SQL.' : 'Add a database connection to get started.'; host.append(empty); }
+    else {
+      const empty = document.createElement('div'); empty.className = 'db-empty';
+      const icon = document.createElement('span'); icon.className = 'db-empty-icon'; icon.textContent = '▦'; icon.setAttribute('aria-hidden', 'true');
+      const title = document.createElement('h2'); const description = document.createElement('p');
+      title.textContent = this.sets.length ? 'Query completed' : this.connected ? 'Choose a table to explore' : this.connection ? 'Open your database' : 'Your data starts here';
+      description.textContent = this.sets.length ? 'This statement returned no columns. See the affected row count above.' : this.connected ? 'Browse rows, inspect columns and edit values. Open the SQL editor whenever you need a query.' : this.connection ? 'Connect to browse tables and views, or open the SQL editor to run a query.' : 'Connect PostgreSQL, MySQL, MariaDB or a local SQLite file to explore your project data.';
+      empty.append(icon, title, description);
+      const button = document.createElement('button'); button.className = 'primary-button';
+      button.textContent = this.connected || this.sets.length ? 'Open SQL editor' : this.connection ? 'Connect to database' : 'Add connection';
+      button.onclick = () => { if (!this.busy) void this.perform(() => this.connected || this.sets.length ? this.showQuery(true) : this.connection ? this.connect() : this.connectionForm()); };
+      empty.append(button); host.append(empty);
+    }
   }
   private async editCell(row: number, column: number) {
     const meta = this.columns[column]; const original = this.result.rows[row][column];
@@ -340,6 +382,6 @@ export class DatabaseView {
     const message = await this.operation('Downloading image and creating server (up to 5 minutes)…', () => invoke<string>('db_create_server', { projectId: this.project!.id, request: { engine: data.get('engine'), version: data.get('version'), port: Number(data.get('port')), database: data.get('database'), username: data.get('username'), password: data.get('password') } }));
     this.status(message); this.notify(message);
     this.connection = await invoke<DbConnection>('db_save_connection', { connection: { id: '', project_id: this.project.id, name: String(data.get('database')), engine: data.get('engine'), host: '127.0.0.1', port: Number(data.get('port')), database: data.get('database'), username: data.get('username'), tls: false, saved_password: false }, password: data.get('password'), remember: false });
-    await this.refreshConnections(); this.clearResults(); this.tables = []; this.renderTree(); this.status(message + ' Connection saved for this session; click Connect when ready.');
+    this.connected = false; await this.refreshConnections(); this.clearResults(); this.tables = []; this.renderTree(); this.status(message + ' Connection saved for this session; click Connect when ready.');
   }
 }

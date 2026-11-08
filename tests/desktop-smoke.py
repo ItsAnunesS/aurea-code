@@ -414,6 +414,8 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelector(".file-sidebar").getBoundingClientRect().width') > previous_width
         click('[data-page="database"]')
         wait_for('document.querySelector("#db-sql .cm-content") !== null')
+        assert execute('return document.querySelector("#db-query-panel").hidden')
+        assert execute('return document.querySelector(".db-empty h2").textContent') == 'Your data starts here'
         click('#db-new')
         input_text('#database-modal input[name="name"]', 'Fixture database')
         execute('const select = document.querySelector("#database-modal select[name=engine]"); select.value = "sqlite"; select.dispatchEvent(new Event("change"));')
@@ -423,12 +425,27 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         click('.db-table')
         wait_for('document.querySelector(".db-grid")?.textContent.includes("Alice")')
         assert execute('return document.querySelector(".db-grid td.null").textContent') == 'NULL'
+        assert execute('return document.querySelector("#db-query-panel").hidden')
+        assert execute('return document.querySelector("#db-title").textContent') == 'people'
+        input_text('#db-filter-tables', 'missing_table')
+        assert 'No tables match' in execute('return document.querySelector("#db-tree").textContent')
+        execute('const filter = document.querySelector("#db-filter-tables"); filter.value = ""; filter.dispatchEvent(new Event("input"));')
+        Path('/app/artifacts/database-browse-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        for theme in ['Dark', 'Light']:
+            click('#appearance-button')
+            execute("[...document.querySelectorAll('.context-menu button')].find(button => button.textContent===arguments[0]).click();", theme)
+            wait_for(f'document.documentElement.dataset.appearance === "{theme.lower()}"')
+            Path(f'/app/artifacts/database-browse-{theme.lower()}.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        assert execute('return document.querySelector("#db-results").getBoundingClientRect().height > 200')
+
+
         double_click('td[aria-label="Edit name, row 1"]')
         execute('document.querySelector("#database-modal textarea").value = "Updated Alice";')
         click('#database-modal button[type="submit"]')
         assert execute('return document.querySelector("td.pending").textContent') == 'Updated Alice'
         with sqlite3.connect(project / 'fixture.db') as database:
             assert database.execute('SELECT name FROM people').fetchone()[0] == 'Alice'
+        assert not execute('return document.querySelector("#db-pending").hidden')
         click('#db-apply')
         click('#database-modal button[type="submit"]')
         wait_for('document.querySelector("#db-status").textContent.includes("rows updated")')
@@ -437,6 +454,8 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         click('#db-structure')
         assert 'Primary key' in execute('return document.querySelector(".db-grid").textContent')
         click('#db-data')
+        click('#db-toggle-sql')
+        assert not execute('return document.querySelector("#db-query-panel").hidden')
         input_text('#db-sql .cm-content', '\nSELECT id, name FROM people;')
         click('#db-run')
         wait_for('document.querySelector("#db-status").textContent.includes("Completed")')
@@ -444,6 +463,9 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelector("td.editable") === null')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/database-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        click('#db-toggle-sql')
+        click('#db-toggle-sql')
+        assert 'SELECT id, name FROM people' in execute('return document.querySelector("#db-sql .cm-content").textContent')
         click('#db-save-sql')
         click('#database-modal button[type="submit"]')
         wait_for('document.querySelector("#db-status").textContent.includes("Saved query.sql")')
@@ -704,6 +726,7 @@ else: raise SystemExit('Unexpected mutation')
             assert 'Volume: aurea-db-' in created
         click('[data-page="database"]')
         wait_for('document.querySelector("#db-connections").value !== ""')
+        click('.db-bottom summary')
         click('#db-tools')
         execute('const engine = document.querySelector("#database-modal select[name=engine]"); engine.value = "postgres"; engine.dispatchEvent(new Event("change")); const source = document.querySelector("#database-modal select[name=source]"); source.value = "docker"; source.dispatchEvent(new Event("change"));')
         click('#database-modal button[type="submit"]')
@@ -736,7 +759,7 @@ else: raise SystemExit('Unexpected mutation')
         wait_for('document.querySelector("#docker-list").textContent.includes("container-b")')
         assert 'container-a' not in execute('return document.querySelector("#docker-list").textContent')
         click('[data-page="git"]')
-        wait_for('document.querySelector("#git-status")?.textContent.includes("Open the repository root")')
+        wait_for('document.querySelector("#git-status")?.textContent.includes("Open the folder containing .git")')
         click('#back-launcher')
         click('[data-page="settings"]')
         wait_for('document.querySelector(".tool-row") !== null')

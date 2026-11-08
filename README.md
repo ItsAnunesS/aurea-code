@@ -82,7 +82,7 @@ Closing the window keeps the app in the system tray when available. Use **File â
 
 ## Databases
 
-Open **Data** in the IDE tool bar. Add a connection and select **Connect**. Network connections verify TLS certificates and hostnames by default; explicitly uncheck TLS for a local server that does not use TLS. SQLite opens an existing file relative to the project, including an empty file created in the explorer.
+Open **Data** in the IDE tool bar. The table browser takes the full workspace by default; use **SQL editor** to reveal or hide your query without losing the script. Selecting a saved connection connects and loads its schema. Use **Structure** to inspect columns and the pending-edits bar to apply or discard edits. Connection editing/removal is in the **â‹¯** menu; Docker and client setup are grouped under **Database tools**. Add a connection and select **Connect**. Network connections verify TLS certificates and hostnames by default; explicitly uncheck TLS for a local server that does not use TLS. SQLite opens an existing file relative to the project, including an empty file created in the explorer.
 
 Connection metadata is stored in application data, scoped to the project. Passwords remain in memory for the application session unless **Remember password** is selected. Saved passwords use the operating system credential vault (Secret Service on Linux; Windows Credential Manager). A locked or unavailable vault produces an error, never a plaintext fallback. Docker server passwords are supplied through process environment variables to the official images; Docker administrators can inspect the resulting container environment. They are never written to project files or command-line arguments.
 
