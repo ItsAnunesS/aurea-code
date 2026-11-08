@@ -81,6 +81,29 @@ pub fn run(program: &str, args: &[&OsStr], directory: &Path) -> Result<String> {
 pub fn config_query(args: &[&OsStr], directory: &Path) -> Result<String> {
     run_inner("git", args, directory, true)
 }
+// Host tools must not load libraries bundled for the AppImage itself.
+#[cfg(target_os = "linux")]
+fn configure_host_libraries(
+    command: &mut Command,
+    app_dir: Option<&OsStr>,
+    libraries: Option<&OsStr>,
+) {
+    let (Some(app_dir), Some(libraries)) = (app_dir, libraries) else {
+        return;
+    };
+    let app_dir = Path::new(app_dir);
+    if !app_dir.is_absolute() {
+        return;
+    }
+    let paths: Vec<_> = env::split_paths(libraries)
+        .filter(|path| !path.starts_with(app_dir))
+        .collect();
+    if paths.is_empty() {
+        command.env_remove("LD_LIBRARY_PATH");
+    } else if let Ok(value) = env::join_paths(paths) {
+        command.env("LD_LIBRARY_PATH", value);
+    }
+}
 fn run_inner(
     program: &str,
     args: &[&OsStr],
@@ -88,6 +111,12 @@ fn run_inner(
     missing_config: bool,
 ) -> Result<String> {
     let mut command = Command::new(executable(program)?);
+    #[cfg(target_os = "linux")]
+    configure_host_libraries(
+        &mut command,
+        env::var_os("APPDIR").as_deref(),
+        env::var_os("LD_LIBRARY_PATH").as_deref(),
+    );
     command
         .args(args)
         .current_dir(directory)
@@ -150,6 +179,10 @@ fn run_inner(
             "{program}: {}",
             String::from_utf8_lossy(if stderr.is_empty() { &stdout } else { &stderr }).trim()
         ));
+    }
+    // Git stdout contains machine-readable paths, status and configuration.
+    if program == "git" {
+        return Ok(String::from_utf8_lossy(&stdout).into_owned());
     }
     Ok(format!(
         "{}{}",
@@ -217,6 +250,9 @@ pub fn docker_args(action: &str, container: &str) -> Result<Vec<String>> {
     Ok(args.iter().map(|s| s.to_string()).collect())
 }
 pub fn require_repository_root(directory: &Path) -> Result<()> {
+    if !directory.join(".git").try_exists().map_err(error)? {
+        return Err("This folder is not a Git repository root. Open the folder containing .git (or initialize a repository in the terminal if this is a new project).".into());
+    }
     let root = run(
         "git",
         &[OsStr::new("rev-parse"), OsStr::new("--show-toplevel")],
@@ -247,6 +283,63 @@ pub fn reveal_project(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn host_tools_exclude_only_appimage_library_paths() {
+        let mut command = Command::new("git");
+        configure_host_libraries(
+            &mut command,
+            Some(OsStr::new("/tmp/.mount_aurea")),
+            Some(OsStr::new(
+                "/tmp/.mount_aurea/usr/lib:/opt/host/lib:/tmp/.mount_aurea-other/lib",
+            )),
+        );
+        let value = command
+            .get_envs()
+            .find(|(key, _)| *key == "LD_LIBRARY_PATH")
+            .unwrap()
+            .1
+            .unwrap();
+        assert_eq!(value, "/opt/host/lib:/tmp/.mount_aurea-other/lib");
+        configure_host_libraries(
+            &mut command,
+            Some(OsStr::new("/tmp/.mount_aurea")),
+            Some(OsStr::new("/tmp/.mount_aurea/usr/lib")),
+        );
+        assert_eq!(
+            command
+                .get_envs()
+                .find(|(key, _)| *key == "LD_LIBRARY_PATH")
+                .unwrap()
+                .1,
+            None
+        );
+        let mut native = Command::new("git");
+        configure_host_libraries(&mut native, None, Some(OsStr::new("/opt/host/lib")));
+        assert_eq!(native.get_envs().count(), 0);
+    }
+    #[test]
+    fn non_repository_has_actionable_error() {
+        let directory = tempfile::tempdir().unwrap();
+        let message = require_repository_root(directory.path()).unwrap_err();
+        assert!(message.contains("Open the folder containing .git"));
+        assert!(!directory.path().join(".git").exists());
+    }
+    #[test]
+    fn git_warnings_do_not_corrupt_stdout() {
+        let directory = tempfile::tempdir().unwrap();
+        let output = run(
+            "git",
+            &[
+                OsStr::new("-c"),
+                OsStr::new("alias.warn=!printf result; printf warning >&2"),
+                OsStr::new("warn"),
+            ],
+            directory.path(),
+        )
+        .unwrap();
+        assert_eq!(output, "result");
+    }
     #[test]
     fn rejects_arbitrary_operations() {
         assert!(git_args("push", "").is_err());
@@ -260,6 +353,42 @@ mod tests {
         let args = git_args("commit", message).unwrap();
         assert_eq!(args.last().unwrap(), message);
         assert_eq!(args.len(), 5);
+    }
+    #[test]
+    fn accepts_linked_worktree_roots() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        run("git", &[OsStr::new("init")], root).unwrap();
+        run(
+            "git",
+            &[
+                OsStr::new("-c"),
+                OsStr::new("user.name=Test"),
+                OsStr::new("-c"),
+                OsStr::new("user.email=test@example.invalid"),
+                OsStr::new("commit"),
+                OsStr::new("--allow-empty"),
+                OsStr::new("-m"),
+                OsStr::new("Initial"),
+            ],
+            root,
+        )
+        .unwrap();
+        let worktree = root.join("linked");
+        run(
+            "git",
+            &[
+                OsStr::new("worktree"),
+                OsStr::new("add"),
+                OsStr::new("-b"),
+                OsStr::new("linked"),
+                worktree.as_os_str(),
+            ],
+            root,
+        )
+        .unwrap();
+        assert!(worktree.join(".git").is_file());
+        require_repository_root(&worktree).unwrap();
     }
     #[test]
     fn reads_real_repository_and_stages_changes() {

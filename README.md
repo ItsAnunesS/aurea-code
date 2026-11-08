@@ -72,7 +72,7 @@ Docker volumes isolate `node_modules` and Rust build outputs from the host. The 
 2. In the launcher, create a workspace or use **Personal**.
 3. Use **Open folder** to select an existing folder, or create one through the native dialog.
 4. Open files from the explorer or click **Terminal** to start a shell in the project directory.
-5. Install `git` and `docker` as native executables on `PATH`. **Settings** shows detected paths. On Windows, this version requires `.exe` executables rather than npm `.cmd` wrappers. Restart Aurea after installing tools.
+5. Install `git` and `docker` as native executables on `PATH`. **Settings** shows detected paths. On Windows, this version requires `.exe` executables rather than npm `.cmd` wrappers. Restart Aurea after installing tools. On Linux, host tools exclude AppImage library directories from their library search path. Git requires a repository root (including linked worktrees); folders without `.git` show instructions to open or initialize a repository.
 
 The IDE shows tools only for the open project. Use **← Projects** to return to the launcher. Unsaved changes and active terminals require confirmation; sessions close before switching projects.
 
