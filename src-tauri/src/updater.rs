@@ -22,8 +22,19 @@ impl Drop for Operation<'_> {
     }
 }
 
+pub struct InstallationLock(File);
+impl Drop for InstallationLock {
+    fn drop(&mut self) {
+        // Closing alone leaves the lock held by descriptors inherited during
+        // a concurrent PTY fork. Release it when its owning operation ends.
+        if let Err(error) = self.0.unlock() {
+            eprintln!("Unable to release the installation lock: {error}");
+        }
+    }
+}
+
 // Both executables use the same OS lock. A crash releases it automatically.
-pub fn lock_installation(directory: &Path) -> Result<File> {
+pub fn lock_installation(directory: &Path) -> Result<InstallationLock> {
     std::fs::create_dir_all(directory).map_err(|e| e.to_string())?;
     let lock = OpenOptions::new()
         .create(true)
@@ -35,7 +46,7 @@ pub fn lock_installation(directory: &Path) -> Result<File> {
     lock.try_lock().map_err(|_| {
         "Close Aurea Code (including the system tray) before updating, then retry.".to_string()
     })?;
-    Ok(lock)
+    Ok(InstallationLock(lock))
 }
 fn ide_path() -> Result<PathBuf> {
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
@@ -212,9 +223,12 @@ mod tests {
     fn installation_lock_prevents_updates_while_ide_runs() {
         let directory = tempfile::tempdir().unwrap();
         let ide = lock_installation(directory.path()).unwrap();
+        // Model a descriptor inherited by a concurrently forked PTY child.
+        let inherited = ide.0.try_clone().unwrap();
         assert!(lock_installation(directory.path()).is_err());
         drop(ide);
         assert!(lock_installation(directory.path()).is_ok());
+        drop(inherited);
     }
     #[test]
     fn official_updater_rejects_tampered_payloads_and_mismatched_versions() {
