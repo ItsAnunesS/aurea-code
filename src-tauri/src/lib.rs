@@ -2,6 +2,8 @@ mod database;
 mod docker;
 mod files;
 mod git;
+mod git_remote;
+mod git_settings;
 mod process;
 mod store;
 mod terminal;
@@ -206,6 +208,8 @@ pub fn run() {
             files::read_file,
             files::save_file,
             git::git_snapshot,
+            git_settings::git_settings_read,
+            git_settings::git_setting_write,
             git::git_workspace_action,
             process::tools_status,
             process::git_action,

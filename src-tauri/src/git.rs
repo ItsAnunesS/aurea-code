@@ -7,8 +7,8 @@ use std::{
     ffi::OsStr,
     path::{Component, Path},
 };
-fn git(root: &Path, args: &[&str]) -> Result<String> {
-    let mut command = vec![OsStr::new("--no-pager"), OsStr::new("--literal-pathspecs")];
+pub(crate) fn git(root: &Path, args: &[&str]) -> Result<String> {
+    let mut command = vec![OsStr::new("--no-pager")];
     command.extend(args.iter().map(OsStr::new));
     run("git", &command, root)
 }
@@ -40,6 +40,7 @@ pub struct Snapshot {
     changes: Vec<Change>,
     commits: Vec<Commit>,
     stashes: Vec<Stash>,
+    repository: crate::git_remote::Repository,
 }
 fn changes(status: &str) -> Result<(String, Vec<Change>)> {
     let mut records = status.split('\0').filter(|record| !record.is_empty());
@@ -115,6 +116,7 @@ pub fn snapshot(root: &Path) -> Result<Snapshot> {
         changes,
         commits,
         stashes,
+        repository: crate::git_remote::repository(root)?,
     })
 }
 fn pathspec(path: &str) -> Result<()> {
@@ -132,8 +134,9 @@ pub fn operation(root: &Path, action: &str, target: &str, message: &str) -> Resu
     match action {
         "stage-file" | "unstage-file" | "file-diff" | "index-diff" => {
             pathspec(target)?;
+            let literal = format!(":(literal){target}");
             match action {
-                "stage-file" => git(root, &["add", "--", target]),
+                "stage-file" => git(root, &["add", "--", &literal]),
                 "unstage-file" => {
                     if git(root, &["rev-parse", "--verify", "HEAD"]).is_ok() {
                         let (_, entries) =
@@ -143,17 +146,26 @@ pub fn operation(root: &Path, action: &str, target: &str, message: &str) -> Resu
                             .find(|entry| entry.path == target)
                             .and_then(|entry| entry.original_path.as_deref());
                         if let Some(original) = original {
-                            git(root, &["reset", "HEAD", "--", target, original])
+                            git(
+                                root,
+                                &[
+                                    "reset",
+                                    "HEAD",
+                                    "--",
+                                    &literal,
+                                    &format!(":(literal){original}"),
+                                ],
+                            )
                         } else {
-                            git(root, &["reset", "HEAD", "--", target])
+                            git(root, &["reset", "HEAD", "--", &literal])
                         }
                     } else {
-                        git(root, &["rm", "--cached", "--", target])
+                        git(root, &["rm", "--cached", "--", &literal])
                     }
                 }
                 "file-diff" => git(
                     root,
-                    &["diff", "--no-ext-diff", "--no-textconv", "--", target],
+                    &["diff", "--no-ext-diff", "--no-textconv", "--", &literal],
                 ),
                 _ => git(
                     root,
@@ -163,7 +175,7 @@ pub fn operation(root: &Path, action: &str, target: &str, message: &str) -> Resu
                         "--no-ext-diff",
                         "--no-textconv",
                         "--",
-                        target,
+                        &literal,
                     ],
                 ),
             }
@@ -229,7 +241,7 @@ pub fn operation(root: &Path, action: &str, target: &str, message: &str) -> Resu
                 ],
             )
         }
-        _ => Err("Unsupported Git workspace operation.".into()),
+        _ => crate::git_remote::operation(root, action, target, message),
     }
 }
 #[tauri::command]
@@ -275,7 +287,9 @@ mod tests {
         assert!(operation(root, "file-diff", "a space.txt", "")
             .unwrap()
             .contains("+second"));
+        std::fs::write(root.join("untracked.txt"), "untracked").unwrap();
         operation(root, "stash-save", "", "my changes").unwrap();
+        assert!(!root.join("untracked.txt").exists());
         let state = snapshot(root).unwrap();
         assert!(state.changes.is_empty());
         assert_eq!(state.commits[0].subject, "first commit");

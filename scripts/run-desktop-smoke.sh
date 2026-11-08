@@ -4,6 +4,8 @@ cd "$(dirname "$0")/.."
 # Keep test metadata separate even when this script is run outside an ephemeral container.
 export XDG_DATA_HOME
 XDG_DATA_HOME=$(mktemp -d)
+export GIT_CONFIG_GLOBAL="$XDG_DATA_HOME/test-gitconfig"
+export GIT_CONFIG_NOSYSTEM=1
 trap 'rm -rf "$XDG_DATA_HOME"' EXIT
 dbus-run-session -- xvfb-run -a -s '-screen 0 1440x1000x24' bash -c '
   set -euo pipefail

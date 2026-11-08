@@ -76,6 +76,17 @@ fn collect(mut reader: impl Read) -> std::io::Result<Vec<u8>> {
     Ok(output)
 }
 pub fn run(program: &str, args: &[&OsStr], directory: &Path) -> Result<String> {
+    run_inner(program, args, directory, false)
+}
+pub fn config_query(args: &[&OsStr], directory: &Path) -> Result<String> {
+    run_inner("git", args, directory, true)
+}
+fn run_inner(
+    program: &str,
+    args: &[&OsStr],
+    directory: &Path,
+    missing_config: bool,
+) -> Result<String> {
     let mut command = Command::new(executable(program)?);
     command
         .args(args)
@@ -91,6 +102,10 @@ pub fn run(program: &str, args: &[&OsStr], directory: &Path) -> Result<String> {
             "GIT_WORK_TREE",
             "GIT_INDEX_FILE",
             "GIT_COMMON_DIR",
+            "GIT_LITERAL_PATHSPECS",
+            "GIT_GLOB_PATHSPECS",
+            "GIT_NOGLOB_PATHSPECS",
+            "GIT_ICASE_PATHSPECS",
         ] {
             command.env_remove(key);
         }
@@ -127,10 +142,13 @@ pub fn run(program: &str, args: &[&OsStr], directory: &Path) -> Result<String> {
         .join()
         .map_err(|_| "Failed to read stderr.")?
         .map_err(error)?;
+    if missing_config && status.code() == Some(1) && stdout.is_empty() && stderr.is_empty() {
+        return Ok(String::new());
+    }
     if !status.success() {
         return Err(format!(
             "{program}: {}",
-            String::from_utf8_lossy(&stderr).trim()
+            String::from_utf8_lossy(if stderr.is_empty() { &stdout } else { &stderr }).trim()
         ));
     }
     Ok(format!(

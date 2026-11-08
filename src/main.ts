@@ -1,3 +1,4 @@
+import { GitSettingsView } from './git-settings-view';
 import { GitView } from './git-view';
 import { appearance, setAppearance, type Appearance } from './appearance';
 import { editName } from './inline-name';
@@ -90,6 +91,7 @@ for (const [id, glyph, title] of [
 const moreButton = document.createElement('button'); moreButton.id = 'workspace-more'; moreButton.className = 'toolbar-icon'; moreButton.innerHTML = icon('more'); moreButton.title = 'Workspace actions'; moreButton.setAttribute('aria-label', 'Workspace actions'); moreButton.setAttribute('aria-haspopup', 'menu'); element('#ide-actions').append(moreButton);
 const themeButton = document.createElement('button'); themeButton.id = 'appearance-button'; themeButton.className = 'toolbar-icon'; themeButton.innerHTML = icon('sun'); themeButton.title = 'Appearance'; themeButton.setAttribute('aria-label', 'Appearance'); themeButton.setAttribute('aria-haspopup', 'menu'); element('.window-bar').insertBefore(themeButton, element('.window-controls'));
 element('.section-heading > span').textContent = 'Files';
+element('.sidebar-bottom [data-page="settings"]').innerHTML = `${icon('settings')} Settings`;
 for (const [page, label] of [['editor', 'Code'], ['git', 'Changes'], ['docker', 'Services'], ['database', 'Data']]) element(`#ide-navigation [data-page="${page}"] span`).textContent = label;
 element('#editor-empty').innerHTML = `<div class="empty-symbol">${icon('code')}</div><h2>Your workspace.</h2><p>Choose a file, or find it with a quick search.</p><div class="welcome-actions"><button id="empty-search">Find a file <kbd>Ctrl P</kbd></button><button id="empty-commands">Browse actions <kbd>Ctrl Shift P</kbd></button><button id="empty-terminal">Open terminal <kbd>Ctrl &#96;</kbd></button></div>`;
 
@@ -143,27 +145,29 @@ function refreshSidebar() {
   document.querySelectorAll('[data-page]').forEach(node => { const active = (node as HTMLElement).dataset.page === page; node.classList.toggle('active', active); if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); });
 }
 async function navigate(next: Page) {
+  const refreshFiles = page === 'git' && next === 'editor';
   if (page === 'git' && next !== 'git') { if (gitView.running) { notify('Wait for the Git operation to finish.'); return; } }
   if (['editor', 'git', 'docker', 'database'].includes(next) && !projectId) { notify('Open a project to use its tools.'); return; }
   if (['projects', 'settings'].includes(next) && projectId) {
     if (databaseView.busy) { notify('Finish or cancel the database operation before leaving the project.'); return; }
     if (!await canDiscard()) return;
     if (terminals.running && !await confirmAction('Returning to the launcher will close this project\'s terminals. Continue?')) return;
-    await terminals.closeAll(); editor.close(); databaseView.reset(); projectId = ''; treeRevision++;
+    await terminals.closeAll(); editor.close(); databaseView.reset(); projectId = ''; gitView.setProject(''); treeRevision++;
   }
+  if (!projectId) gitView.setProject('');
   stage = projectId ? 'ide' : 'launcher'; app.dataset.stage = stage;
   element('#ide-header').hidden = stage !== 'ide'; element('#ide-navigation').hidden = stage !== 'ide';
   if (stage === 'ide') { element('#ide-project-name').textContent = project().name; element('#ide-project-path').textContent = project().path; }
   if (next !== 'git') gitView.deactivate();
   page = next; pageRevision++; refreshSidebar();
-    const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', git: 'Source control', docker: 'Docker', database: 'Databases', settings: 'Environment' };
+    const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', git: 'Source control', docker: 'Docker', database: 'Databases', settings: 'Settings' };
     element('#page-name').textContent = names[page];
     element('#editor-page').hidden = stage !== 'ide' || page === 'database'; content.hidden = page === 'editor' || page === 'database';
     element('#database-page').hidden = page !== 'database';
     app.dataset.tool = page;
     element('#explorer-root').textContent = projectId ? project().name : '';
     element('#ide-project-name').title = projectId ? project().path : '';
-    if (page === 'editor') content.replaceChildren();
+    if (page === 'editor') { content.replaceChildren(); if (refreshFiles) await renderTree(); }
     if (page === 'projects') renderProjects();
     else if (page === 'git') await renderGit();
     else if (page === 'docker') await renderDocker();
@@ -191,7 +195,7 @@ async function openProject(id: string) {
   desktop();
   if (id !== projectId && projectId) { await navigate('projects'); if (projectId) return; }
   terminals.activate(id);
-  if (id !== projectId) editor.close(); projectId = id;
+  if (id !== projectId) editor.close(); projectId = id; gitView.setProject(id);
   await navigate('editor'); await renderTree();
 }
 async function transferEntries(entries: FileEntry[], destination: string, copy: boolean) {
@@ -392,7 +396,8 @@ async function renderSettings() {
   const revision = pageRevision;
   if (isTauri()) tools = await invoke('tools_status');
   if (revision !== pageRevision) return;
-  content.innerHTML = heading('DESKTOP INTEGRATION', 'Ready to work.', 'Aurea uses the tools installed on your system.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Local tools and permissions</h3><p>Terminals, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
+  content.innerHTML = heading('DESKTOP INTEGRATION', 'Settings', 'Computer-wide Git preferences and desktop tools.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Local tools and permissions</h3><p>Terminals, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
+  const gitSettings = document.createElement('section'); gitSettings.className = 'settings-card'; content.append(gitSettings); void new GitSettingsView(gitSettings, null, notify).render('global');
 }
 async function quit() {
   if (gitView.running) { notify('Wait for the Git operation to finish before quitting.'); return; }

@@ -539,13 +539,78 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#git-output")?.textContent.includes("diff --git")')
         Path('/app/artifacts/git-history-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
         (project / 'stash-example.txt').write_text('saved stash contents')
-        invoke('git_workspace_action', {'projectId': registered['id'], 'action': 'stash-save', 'target': '', 'message': 'Example stash'})
+        stash_result = invoke('git_workspace_action', {'projectId': registered['id'], 'action': 'stash-save', 'target': '', 'message': 'Example stash'})
+        assert not (project / 'stash-example.txt').exists(), stash_result
         wait_for('document.querySelector("#git-refresh") !== null')
         click('#git-refresh')
         execute("[...document.querySelectorAll('.git-segments button')].find(b=>b.textContent.startsWith('Stashes')).click();")
         wait_for('document.querySelector(".git-stash-row") !== null')
         click('.git-stash-row button:first-child')
         wait_for('document.querySelector("#git-output")?.textContent.includes("saved stash contents")')
+        def confirm_native():
+            display = x11.XOpenDisplay(None)
+            assert display
+            try:
+                time.sleep(.2)
+                code = x11.XKeysymToKeycode(display, 0xff0d)
+                xtest.XTestFakeKeyEvent(display, code, 1, 0)
+                xtest.XTestFakeKeyEvent(display, code, 0, 0)
+                x11.XSync(display, 0)
+                time.sleep(.2)
+            finally:
+                x11.XCloseDisplay(display)
+
+        # Global identity is written only to the isolated test configuration file.
+        execute("[...document.querySelectorAll('.git-segments button')].find(b=>b.textContent.startsWith('Settings')).click();")
+        wait_for("""document.querySelector('[data-git-setting="user.name"]') !== null""")
+        execute("const input=document.querySelector('[data-git-setting=\"user.name\"]'); input.value='Project Identity'; input.closest('form').requestSubmit();")
+        wait_for('document.querySelector(".git-settings")?.textContent.includes("Effective: Project Identity")')
+        execute("[...document.querySelectorAll('.git-settings .git-segments button')].find(b=>b.textContent==='This computer').click();")
+        wait_for('document.querySelector(".git-settings h2")?.textContent === "Git on this computer"')
+        execute("const input=document.querySelector('[data-git-setting=\"user.name\"]'); input.value='Computer Identity'; input.closest('form').requestSubmit();")
+        wait_for("""document.querySelector('[data-git-setting="user.name"]')?.value === 'Computer Identity' && !document.querySelector('[data-git-setting="user.name"]')?.disabled""")
+        settings = invoke('git_settings_read', {'projectId': registered['id']})
+        identity = next(item for item in settings if item['key']=='user.name')
+        assert identity['globalValue'] == 'Computer Identity' and identity['effectiveValue'] == 'Project Identity'
+        execute("[...document.querySelectorAll('.git-settings .git-segments button')].find(b=>b.textContent==='This project').click();")
+        wait_for('document.querySelector(".git-settings h2")?.textContent === "Project Git settings"')
+        execute("const input=document.querySelector('[data-git-setting=\"user.name\"]'); input.value=''; input.closest('form').requestSubmit();")
+        wait_for('document.querySelector(".git-settings")?.textContent.includes("Effective: Computer Identity")')
+        Path('/app/artifacts/git-settings-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        # Branch creation, switching, merge, remote publication and synchronization.
+        branch_state = invoke('git_snapshot', {'projectId': registered['id']})
+        assert not branch_state['changes'], branch_state['changes']
+        initial_branch = branch_state['repository']['current']
+        execute("[...document.querySelectorAll('.git-segments button')].find(b=>b.textContent.startsWith('Branches')).click();")
+        input_text('input[aria-label="New branch name"]', 'feature/ui')
+        execute("document.querySelector('input[aria-label=\"New branch name\"]').closest('form').requestSubmit();")
+        wait_for('document.querySelector(".git-header h1")?.textContent === "feature/ui"')
+        execute("const row=[...document.querySelectorAll('.git-branch-row')].find(row=>row.querySelector('strong').textContent===arguments[0]); [...row.querySelectorAll('button')].find(b=>b.textContent==='Switch').click();", initial_branch)
+        confirm_native()
+        wait_for(f'document.querySelector(".git-header h1")?.textContent === {json.dumps(initial_branch)}')
+        execute("const row=[...document.querySelectorAll('.git-branch-row')].find(row=>row.querySelector('strong').textContent==='feature/ui'); [...row.querySelectorAll('button')].find(b=>b.textContent==='Merge into current').click();")
+        confirm_native()
+        wait_for('document.querySelector("#page-content").getAttribute("aria-busy") !== "true"')
+        with tempfile.TemporaryDirectory(prefix='aurea-remote-') as remote_directory:
+            subprocess.run(['git', 'init', '--bare', '-q', remote_directory], check=True)
+            wait_for("""document.querySelector('input[aria-label="Remote URL"]') && !document.querySelector('input[aria-label="Remote URL"]').disabled""")
+            input_text('input[aria-label="Remote URL"]', remote_directory)
+            execute("document.querySelector('input[aria-label=\"Remote URL\"]').closest('form').requestSubmit();")
+            wait_for("""document.querySelector('select[aria-label="Git remote"]')?.options.length === 1""")
+            execute("[...document.querySelectorAll('.git-remote-toolbar button')].find(b=>b.textContent==='Publish branch').click();")
+            confirm_native()
+            wait_for('document.querySelector(".git-remote-toolbar")?.textContent.includes("origin/")')
+            execute("[...document.querySelectorAll('.git-remote-toolbar button')].find(b=>b.textContent==='Fetch').click();")
+            wait_for('document.querySelector("#page-content").getAttribute("aria-busy") !== "true" && document.querySelector(".git-remote-toolbar")?.textContent.includes("Fetched just now")')
+            execute("[...document.querySelectorAll('.git-remote-toolbar button')].find(b=>b.textContent==='Pull').click();")
+            confirm_native()
+            wait_for('document.querySelector("#page-content").getAttribute("aria-busy") !== "true"')
+            execute("document.querySelector('input[aria-label=\"New branch name\"]').value='keep-draft'; document.querySelector('.git-auto-fetch input').click(); document.querySelector('.git-auto-fetch input').click();")
+            wait_for('document.querySelector("#page-content").getAttribute("aria-busy") !== "true" && document.querySelector(".git-remote-toolbar")?.getAttribute("aria-busy") === "false" && document.querySelector(".git-remote-toolbar")?.textContent.includes("Fetched just now")')
+            assert execute("""return document.querySelector('input[aria-label="New branch name"]').value""") == 'keep-draft'
+            Path('/app/artifacts/git-branches-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        # Stop background attempts against the removed temporary remote.
+        execute("document.querySelector('.git-auto-fetch input').click();")
         log = invoke('git_action', {'projectId': registered['id'], 'action': 'log'})
         assert 'test: verify desktop integration' in log
         click('#back-launcher')
