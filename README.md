@@ -22,7 +22,7 @@ A minimal desktop IDE built with **Rust + Tauri 2**, TypeScript, CodeMirror, and
 - Real PTY terminals for shells and `docker compose up --build`, with up to eight sessions. Each terminal identifies its project.
 - Database workspace for PostgreSQL, MySQL/MariaDB, and SQLite: per-project connections, schema/table/column explorer, SQL console, editable table grid, result sets, page sorting, and CSV export.
 - Native database clients through the system package manager or versioned official Docker clients; connect published project containers or provision a local development server with a persistent volume.
-- Git status, diffs, staging, history, and commits with normal repository hooks. Open the repository root as a project; subfolders do not inherit a parent project's Git repository.
+- Dedicated Git workspace with Changes / History / Stashes views, per-file staging and unstaging, colored patches, commit author/date details (latest 100 commits), and commits with normal repository hooks. Save a stash including untracked files or apply a saved stash while keeping its backup; ignored files remain untouched. Unsaved editor buffers are excluded from Git operations. Open the repository root as a project; subfolders do not inherit a parent project's Git repository.
 - Docker only shows Compose containers whose `com.docker.compose.project.working_dir` label matches the open project. Every action verifies ownership again in the backend. Unlabelled containers stay hidden. Compose requires a file at the project root and does not search parent folders.
 - Native menus, keyboard shortcuts, folder selection, file manager integration, single-instance behavior, and system tray support.
 - AppImage update metadata and a `.zsync` file for Gear Lever.

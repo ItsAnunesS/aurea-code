@@ -1,3 +1,4 @@
+import { GitView } from './git-view';
 import { appearance, setAppearance, type Appearance } from './appearance';
 import { editName } from './inline-name';
 import { ExplorerSelection } from './explorer-selection';
@@ -109,6 +110,7 @@ const documentPreview = new DocumentPreview(element('#document-preview'), elemen
 const secondaryDocumentPreview = new DocumentPreview(element('#document-preview-secondary'), element('#code-editor-secondary'), element('#document-modes-secondary'), () => editor.groups[1].view?.requestMeasure());
 const mediaPreviews = [new MediaPreview(element('#media-preview')), new MediaPreview(element('#media-preview-secondary'))];
 const terminals = new TerminalManager(element('#terminal-panel'), element('#terminal-tabs'), element('#terminal-content'), notify);
+const gitView = new GitView(content, notify, confirmAction, () => editor.hasUnsavedChanges, (id, path) => { if (id === projectId) void perform(async () => { await navigate('editor'); await editor.open(id, path, true); }); });
 const databaseView = new DatabaseView(element('#database-page'), notify, request => terminals.start(project(), 'database-tool', request));
 function notify(message: string) { const toast = element('#toast'); element('#toast-message').textContent = message; toast.hidden = false; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { toast.hidden = true; }, 9000); }
 element('#toast-close').onclick = () => { element('#toast').hidden = true; window.clearTimeout(toastTimer); };
@@ -141,6 +143,7 @@ function refreshSidebar() {
   document.querySelectorAll('[data-page]').forEach(node => { const active = (node as HTMLElement).dataset.page === page; node.classList.toggle('active', active); if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); });
 }
 async function navigate(next: Page) {
+  if (page === 'git' && next !== 'git') { if (gitView.running) { notify('Wait for the Git operation to finish.'); return; } }
   if (['editor', 'git', 'docker', 'database'].includes(next) && !projectId) { notify('Open a project to use its tools.'); return; }
   if (['projects', 'settings'].includes(next) && projectId) {
     if (databaseView.busy) { notify('Finish or cancel the database operation before leaving the project.'); return; }
@@ -151,6 +154,7 @@ async function navigate(next: Page) {
   stage = projectId ? 'ide' : 'launcher'; app.dataset.stage = stage;
   element('#ide-header').hidden = stage !== 'ide'; element('#ide-navigation').hidden = stage !== 'ide';
   if (stage === 'ide') { element('#ide-project-name').textContent = project().name; element('#ide-project-path').textContent = project().path; }
+  if (next !== 'git') gitView.deactivate();
   page = next; pageRevision++; refreshSidebar();
     const names = { projects: 'Projects', editor: projectId ? project().name : 'Editor', git: 'Source control', docker: 'Docker', database: 'Databases', settings: 'Environment' };
     element('#page-name').textContent = names[page];
@@ -370,17 +374,7 @@ function formDialog(title: string, fields: string, submit: (data: FormData) => P
   modal.showModal(); modal.querySelector<HTMLInputElement>('input')?.focus();
 }
 function newWorkspace() { desktop(); formDialog('New workspace', '<label>Name<input name="title" placeholder="e.g. Work" maxlength="80" required autocomplete="off"></label><p class="muted">Group your local projects in a workspace.</p>', async data => { if (!await canDiscard()) return; db = await invoke('create_workspace', { title: data.get('title') }); workspaceId = db.workspaces.at(-1)!.id; projectId = ''; editor.close(); await navigate('projects'); }); }
-async function renderGit() {
-  const current = project(); const revision = pageRevision;
-  content.innerHTML = heading('SOURCE CONTROL', html(current.name), 'Review changes and create commits without leaving your project.', '<button id="git-refresh" class="small-button">↻ Refresh</button>') + `<div class="git-layout"><div><h3>Repository status</h3><pre id="git-status" class="output">Loading…</pre><div class="button-row"><button id="git-stage" class="small-button">Stage all</button><button id="git-unstage" class="small-button">Unstage</button></div><label class="commit-label">Commit message<textarea id="commit-message" placeholder="feat: describe your change" rows="3" maxlength="4096"></textarea></label><button id="git-commit" class="primary-button">${icon('check')} Create commit</button><p class="muted small">Repository hooks are respected.</p></div><div><div class="tabs"><button data-git-view="diff" class="active">Changes</button><button data-git-view="staged">Staging</button><button data-git-view="log">History</button></div><pre id="git-output" class="output diff">Loading…</pre></div></div>`;
-  async function load(action: string) { desktop(); return invoke<string>('git_action', { projectId: current.id, action }); }
-  bind('#git-refresh', renderGit);
-  bind('[data-git-view]', async b => { const output = await load(b.dataset.gitView!); if (revision !== pageRevision) return; element('#git-output').textContent = output || 'No changes.'; document.querySelectorAll('[data-git-view]').forEach(n => n.classList.toggle('active', n === b)); });
-  bind('#git-stage, #git-unstage', async b => { if (!await confirmAction(b.id === 'git-stage' ? 'Stage all changes in this project? Review the diff before committing.' : 'Unstage changes while keeping the files on disk?')) return; await load(b.id === 'git-stage' ? 'stage' : 'unstage'); if (revision === pageRevision) await renderGit(); });
-  bind('#git-commit', async () => { const message = element<HTMLTextAreaElement>('#commit-message').value.trim(); if (!message) throw new Error('Enter a commit message.'); await invoke('git_action', { projectId: current.id, action: 'commit', message }); notify('Commit created.'); if (revision === pageRevision) await renderGit(); });
-  try { const [status, diff] = await Promise.all([load('status'), load('diff')]); if (revision !== pageRevision) return; element('#git-status').textContent = status || 'No changes.'; element('#git-output').textContent = diff || 'No unstaged changes.'; }
-  catch (error) { if (revision === pageRevision) { element('#git-status').textContent = String(error); element('#git-output').textContent = 'Open a project with an initialized Git repository.'; } }
-}
+async function renderGit() { await gitView.activate(project().id); }
 async function renderDocker() {
   const current = project();
   const revision = pageRevision;
@@ -401,6 +395,7 @@ async function renderSettings() {
   content.innerHTML = heading('DESKTOP INTEGRATION', 'Ready to work.', 'Aurea uses the tools installed on your system.') + `<div class="settings-card"><h2>Local tools</h2>${['git', 'docker'].map(name => { const tool = tools.find(t => t.name === name); return `<div class="tool-row"><div><strong>${name}</strong><p>${html(tool?.path ?? 'Install the native executable and add it to PATH.')}</p></div><span class="badge ${tool?.available ? 'running' : ''}">${tool?.available ? 'Found' : 'Not found'}</span></div>`; }).join('')}</div><div class="settings-grid"><div class="settings-card"><h2>Desktop integration</h2><p>Native menus, keyboard shortcuts, folder selection, and file manager integration.</p><p>${trayReady ? 'Closing the window keeps the app in the system tray. Use File → Quit to exit.' : 'The system tray is unavailable in this environment. Closing the window prompts you to quit.'}</p></div><div class="settings-card"><h2>Linux updates</h2><p>The release AppImage includes the GitHub update source for Gear Lever.</p><code>ItsAnunesS/aurea-code</code><p>Update checks and installation follow your Gear Lever preferences.</p></div></div><div class="info-box"><h3>Local tools and permissions</h3><p>Terminals, Git, and Docker run with your user permissions; only open projects you trust.</p></div>`;
 }
 async function quit() {
+  if (gitView.running) { notify('Wait for the Git operation to finish before quitting.'); return; }
   if (databaseView.busy) { notify('Finish or cancel the database operation before quitting.'); return; }
   if ((editor.hasUnsavedChanges || databaseView.dirty) && !await confirmDiscard('Quit and discard unsaved changes in files, SQL console and database grid?')) return;
   if (terminals.running && !await confirmAction('Terminals are still running. Quitting will close them. Background services may keep running.')) return;
