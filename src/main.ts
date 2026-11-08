@@ -1,3 +1,10 @@
+import { appearance, setAppearance, type Appearance } from './appearance';
+import { editName } from './inline-name';
+import { ExplorerSelection } from './explorer-selection';
+import { showContextMenu } from './context-menu';
+import { MediaPreview } from './media-preview';
+import { ExplorerDrag } from './explorer-drag';
+import { movedPath } from './explorer-transfer.mjs';
 import { DatabaseView } from './database-view';
 import { QuickAccess, type QuickItem } from './quick-access';
 import { resizePanel } from './panel-layout';
@@ -27,6 +34,14 @@ const icons: Record<string, string> = {
   arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
   search: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',
   code: '<path d="m7 6-6 6 6 6m10-12 6 6-6 6m-3-15-4 18"/>',
+  sidebar: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/>',
+  split: '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M12 4v16"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
+  back: '<path d="m14 6-6 6 6 6"/>',
+  refresh: '<path d="M20 7v5h-5M4 17v-5h5M5 8a7 7 0 0 1 12-3l3 4M4 15l3 4a7 7 0 0 0 12-3"/>',
+  collapse: '<path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/>',
+  save: '<path d="m5 12 4 4L19 6"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
 };
 function icon(name: string) { return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name] ?? icons.code}</svg>`; }
@@ -51,10 +66,31 @@ app.innerHTML = `
     <nav id="ide-navigation" hidden aria-label="Project tools"><button data-page="editor" title="Editor" aria-label="Editor">${icon('code')}<span>Editor</span></button><button data-page="git" title="Source control" aria-label="Source control">${icon('git')}<span>Git</span></button><button data-page="docker" title="Docker Compose" aria-label="Docker Compose">${icon('docker')}<span>Docker</span></button><button data-page="database" title="Databases" aria-label="Databases">${icon('database')}<span>Data</span></button><button id="commands" title="Command palette (Ctrl Shift P)" aria-label="Command palette">${icon('search')}<span>Actions</span></button><button id="toggle-explorer" title="Toggle explorer (Ctrl B)" aria-label="Toggle explorer" aria-pressed="true">${icon('folder')}<span>Project</span></button><button id="ide-reveal" title="Reveal project folder" aria-label="Reveal project folder">${icon('folder')}<span>Folder</span></button></nav>
     <header class="topbar"><div class="breadcrumb"><span id="workspace-name">Personal</span><span>/</span><strong id="page-name">Projects</strong></div><div class="top-actions"><span class="shortcut">Ctrl + O</span><button id="open-top" class="small-button">${icon('folder')} Open project</button></div></header>
     <div id="preview-banner" hidden>Interface preview. Open the desktop app to use files, Git, and Docker.</div>
-    <main id="content"><section id="database-page" hidden aria-label="Database workspace"></section><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>PROJECT</span><button id="collapse-folders" class="icon-button" title="Collapse folders" aria-label="Collapse folders">−</button><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="explorer-root"></div><div id="file-tree"></div><div id="explorer-resize" class="resize-handle" aria-label="Explorer width"></div></aside><div class="editor-area"><div id="editor-tabs" role="tablist" aria-label="Open files" hidden></div><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><span id="document-modes" hidden role="group" aria-label="Document view"><button data-document-mode="code" aria-pressed="true">Code</button><button data-document-mode="split" aria-pressed="false">Split</button><button data-document-mode="preview" aria-pressed="false">Preview</button></span><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Your workspace, ready.</h2><p>Choose a file to start editing.</p><div class="welcome-actions"><button id="empty-search">Go to file <kbd>Ctrl P</kbd></button><button id="empty-commands">All commands <kbd>Ctrl Shift P</kbd></button><button id="empty-terminal">Open terminal <kbd>Ctrl &#96;</kbd></button></div></div><div class="document-workspace"><div id="code-editor"></div><article id="document-preview" class="document-preview" aria-label="Document preview" hidden></article></div></div></section></main>
+    <main id="content"><section id="database-page" hidden aria-label="Database workspace"></section><section id="page-content"></section><section id="editor-page" hidden><aside class="file-sidebar"><div class="section-heading"><span>PROJECT</span><button id="collapse-folders" class="icon-button" title="Collapse folders" aria-label="Collapse folders">−</button><button id="new-folder" class="icon-button" title="New folder" aria-label="New folder">▣</button><button id="new-file" class="icon-button" title="New file" aria-label="New file">+</button><button id="refresh-files" class="icon-button" title="Refresh files">↻</button></div><div id="explorer-root"></div><div id="file-tree"></div><div id="explorer-resize" class="resize-handle" aria-label="Explorer width"></div></aside><div class="editor-groups"><div class="editor-area editor-group" data-group="0"><div id="editor-tabs" role="tablist" aria-label="Open files" hidden></div><div class="editor-toolbar"><span id="editor-title">Select a file</span><div><span id="document-modes" hidden role="group" aria-label="Document view"><button data-document-mode="code" aria-pressed="true">Code</button><button data-document-mode="split" aria-pressed="false">Split</button><button data-document-mode="preview" aria-pressed="false">Preview</button></span><button id="split-editor" class="small-button" title="Split editor right (Ctrl+\\)">Split Right</button><button id="reload-file" class="small-button">Reopen</button><button id="save-file" class="small-button">Save</button></div></div><div id="editor-empty" class="editor-empty">${icon('code')}<h2>Your workspace, ready.</h2><p>Choose a file to start editing.</p><div class="welcome-actions"><button id="empty-search">Go to file <kbd>Ctrl P</kbd></button><button id="empty-commands">All commands <kbd>Ctrl Shift P</kbd></button><button id="empty-terminal">Open terminal <kbd>Ctrl &#96;</kbd></button></div></div><div class="document-workspace"><div id="code-editor"></div><div id="media-preview" class="media-preview" hidden></div><article id="document-preview" class="document-preview" aria-label="Document preview" hidden></article></div></div><div id="group-resize" class="resize-handle" aria-label="Editor group width" hidden></div><div class="editor-area editor-group" data-group="1" hidden><div id="editor-tabs-secondary" role="tablist" aria-label="Open files, second group"></div><div class="editor-toolbar"><span id="editor-title-secondary">Select a file</span><div><span id="document-modes-secondary" hidden role="group" aria-label="Document view"><button data-document-mode="code">Code</button><button data-document-mode="split">Split</button><button data-document-mode="preview">Preview</button></span><button id="save-secondary" class="small-button">Save</button><button id="close-group" class="small-button">Close Group</button></div></div><div class="document-workspace"><div id="code-editor-secondary"></div><div id="media-preview-secondary" class="media-preview" hidden></div><article id="document-preview-secondary" class="document-preview" hidden></article></div></div></div></section></main>
     <section id="terminal-panel" hidden><div id="terminal-resize" class="resize-handle" aria-label="Terminal height"></div><div class="terminal-toolbar"><span class="panel-label">TERMINAL</span><div id="terminal-tabs"></div><button id="new-terminal" class="icon-button" title="New terminal" aria-label="New terminal">+</button><button id="hide-terminal" class="icon-button" aria-label="Hide terminal" title="Hide terminal">−</button><button id="close-terminal" class="icon-button" aria-label="Close terminal" title="Close terminal">×</button></div><div id="terminal-content"></div></section>
     <footer class="statusbar"><span><span class="dot"></span> <span id="status-text">Aurea Code</span></span><span id="cursor-position"></span><span id="status-file">UTF-8 <span class="status-separator">·</span> Rust + Tauri</span><button id="show-terminal">${icon('terminal')} Terminal</button></footer>
-  </div><div id="toast" role="status" aria-live="polite" hidden></div><dialog id="modal"></dialog><dialog id="discard-modal" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Unsaved changes</h2><p id="discard-message"></p><div class="modal-actions"><button id="discard-cancel" class="small-button" value="cancel" autofocus>Cancel</button><button id="discard-confirm" class="primary-button" value="discard">Discard changes</button></div></form></dialog>`;
+  </div><div id="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-close" aria-label="Dismiss notification">×</button></div><dialog id="modal"></dialog><dialog id="discard-modal" aria-labelledby="discard-title"><form method="dialog"><h2 id="discard-title">Unsaved changes</h2><p id="discard-message"></p><div class="modal-actions"><button id="discard-cancel" class="small-button" value="cancel" autofocus>Cancel</button><button id="discard-confirm" class="primary-button" value="discard">Discard changes</button></div></form></dialog>`;
+
+// Keep navigation and global tools in one toolbar; the explorer is for files.
+const ideHeader = element('#ide-header');
+ideHeader.insertBefore(element('#ide-navigation'), element('#quick-open'));
+ideHeader.insertBefore(element('#toggle-explorer'), element('#back-launcher'));
+element('#commands').hidden = true; element('#ide-reveal').hidden = true;
+for (const [id, glyph, title] of [
+  ['toggle-explorer', 'sidebar', 'Show or hide files (Ctrl B)'], ['back-launcher', 'back', 'All projects'],
+  ['start-shell', 'terminal', 'Show or hide terminal (Ctrl `)'], ['split-editor', 'split', 'Split editor right (Ctrl \\)'],
+  ['save-file', 'save', 'Save file (Ctrl S)'], ['save-secondary', 'save', 'Save file (Ctrl S)'],
+  ['reload-file', 'refresh', 'Reload from disk'], ['close-group', 'sidebar', 'Merge editor groups'],
+  ['new-file', 'plus', 'New file'], ['new-folder', 'folder', 'New folder'],
+  ['refresh-files', 'refresh', 'Refresh files'], ['collapse-folders', 'collapse', 'Collapse folders'],
+]) {
+  const button = element(`#${id}`); button.innerHTML = icon(glyph); button.title = title; button.setAttribute('aria-label', title); button.classList.add('toolbar-icon');
+}
+const moreButton = document.createElement('button'); moreButton.id = 'workspace-more'; moreButton.className = 'toolbar-icon'; moreButton.innerHTML = icon('more'); moreButton.title = 'Workspace actions'; moreButton.setAttribute('aria-label', 'Workspace actions'); moreButton.setAttribute('aria-haspopup', 'menu'); element('#ide-actions').append(moreButton);
+const themeButton = document.createElement('button'); themeButton.id = 'appearance-button'; themeButton.className = 'toolbar-icon'; themeButton.innerHTML = icon('sun'); themeButton.title = 'Appearance'; themeButton.setAttribute('aria-label', 'Appearance'); themeButton.setAttribute('aria-haspopup', 'menu'); element('.window-bar').insertBefore(themeButton, element('.window-controls'));
+element('.section-heading > span').textContent = 'Files';
+for (const [page, label] of [['editor', 'Code'], ['git', 'Changes'], ['docker', 'Services'], ['database', 'Data']]) element(`#ide-navigation [data-page="${page}"] span`).textContent = label;
+element('#editor-empty').innerHTML = `<div class="empty-symbol">${icon('code')}</div><h2>Your workspace.</h2><p>Choose a file, or find it with a quick search.</p><div class="welcome-actions"><button id="empty-search">Find a file <kbd>Ctrl P</kbd></button><button id="empty-commands">Browse actions <kbd>Ctrl Shift P</kbd></button><button id="empty-terminal">Open terminal <kbd>Ctrl &#96;</kbd></button></div>`;
 
 let db: Database = { version: 1, workspaces: [{ id: 'preview', name: 'Personal' }], projects: [] };
 let tools: ToolStatus[] = [];
@@ -68,11 +104,14 @@ let toastTimer = 0;
 let trayReady = false;
 let treeRevision = 0;
 const content = element<HTMLElement>('#page-content');
-const editor = new CodeEditor(element('#code-editor'), updateEditorTitle, notify, updateCursorPosition);
+const editor = new CodeEditor(element('#code-editor'), updateEditorTitle, notify, updateCursorPosition, element('#code-editor-secondary'));
 const documentPreview = new DocumentPreview(element('#document-preview'), element('#code-editor'), element('#document-modes'), () => editor.view?.requestMeasure());
+const secondaryDocumentPreview = new DocumentPreview(element('#document-preview-secondary'), element('#code-editor-secondary'), element('#document-modes-secondary'), () => editor.groups[1].view?.requestMeasure());
+const mediaPreviews = [new MediaPreview(element('#media-preview')), new MediaPreview(element('#media-preview-secondary'))];
 const terminals = new TerminalManager(element('#terminal-panel'), element('#terminal-tabs'), element('#terminal-content'), notify);
 const databaseView = new DatabaseView(element('#database-page'), notify, request => terminals.start(project(), 'database-tool', request));
-function notify(message: string) { const toast = element('#toast'); toast.textContent = message; toast.hidden = false; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { toast.hidden = true; }, 9000); }
+function notify(message: string) { const toast = element('#toast'); element('#toast-message').textContent = message; toast.hidden = false; window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { toast.hidden = true; }, 9000); }
+element('#toast-close').onclick = () => { element('#toast').hidden = true; window.clearTimeout(toastTimer); };
 function desktop() { if (!isTauri()) throw new Error('This feature is available in the desktop app.'); }
 function workspace() { return db.workspaces.find(w => w.id === workspaceId) ?? db.workspaces[0]; }
 function projects() { return db.projects.filter(p => p.workspace_id === workspace().id); }
@@ -99,7 +138,7 @@ function refreshSidebar() {
   element('#workspace-name').textContent = active.name; element('#project-count').textContent = String(projects().length);
   element('#project-shortcuts').innerHTML = projects().map(p => `<button class="project-shortcut ${p.id === projectId ? 'selected' : ''}" data-project="${html(p.id)}">${icon('folder')}<span>${html(p.name)}</span></button>`).join('') || '<p class="sidebar-hint">Your projects appear here.</p>';
   bind('[data-project]', button => openProject(button.dataset.project!));
-  document.querySelectorAll('[data-page]').forEach(node => node.classList.toggle('active', (node as HTMLElement).dataset.page === page));
+  document.querySelectorAll('[data-page]').forEach(node => { const active = (node as HTMLElement).dataset.page === page; node.classList.toggle('active', active); if (active) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); });
 }
 async function navigate(next: Page) {
   if (['editor', 'git', 'docker', 'database'].includes(next) && !projectId) { notify('Open a project to use its tools.'); return; }
@@ -119,6 +158,7 @@ async function navigate(next: Page) {
     element('#database-page').hidden = page !== 'database';
     app.dataset.tool = page;
     element('#explorer-root').textContent = projectId ? project().name : '';
+    element('#ide-project-name').title = projectId ? project().path : '';
     if (page === 'editor') content.replaceChildren();
     if (page === 'projects') renderProjects();
     else if (page === 'git') await renderGit();
@@ -132,9 +172,10 @@ function renderProjects() {
   const list = projects();
   content.innerHTML = heading('WELCOME TO AUREA CODE', 'Projects', 'Choose where to continue working.', `<button id="add-project" class="primary-button">${icon('folder')} Open folder</button>`) + `
     <div class="list-heading"><h2>In this workspace</h2><label class="search-field">${icon('search')}<input id="project-search" placeholder="Search projects…" aria-label="Search projects"></label></div>
-    <div id="project-grid" class="project-grid">${list.map(p => `<article class="project-card" data-card-name="${html((p.name + ' ' + p.path).toLowerCase())}"><span class="folder-tile">${icon('folder')}</span><div><button class="project-title" data-project="${html(p.id)}">${html(p.name)}</button><p class="project-path" title="${html(p.path)}">${html(p.path)}</p></div><button data-project="${html(p.id)}" class="small-button">Open ${icon('arrow')}</button></article>`).join('') || '<div class="empty-state"><h2>Your next project starts here.</h2><p>Open a folder on your computer to enter the IDE.</p></div>'}</div>
+    <div id="project-grid" class="project-grid">${list.map(p => `<article class="project-card" data-project-card="${html(p.id)}" data-card-name="${html((p.name + ' ' + p.path).toLowerCase())}"><span class="folder-tile">${icon('folder')}</span><div><button class="project-title" data-project="${html(p.id)}">${html(p.name)}</button><p class="project-path" title="${html(p.path)}">${html(p.path)}</p></div><span class="project-chevron" aria-hidden="true">${icon('arrow')}</span></article>`).join('') || '<div class="empty-state"><h2>Your next project starts here.</h2><p>Open a folder on your computer to enter the IDE.</p></div>'}</div>
     `;
   bind('#add-project, #add-project-card', addProject); bind('[data-project]', b => openProject(b.dataset.project!));
+  document.querySelectorAll<HTMLElement>('[data-project-card]').forEach(card => { card.onclick = event => { if (!(event.target as HTMLElement).closest('button')) void perform(() => openProject(card.dataset.projectCard!)); }; });
   element<HTMLInputElement>('#project-search').oninput = event => { const query = (event.target as HTMLInputElement).value.toLowerCase(); document.querySelectorAll<HTMLElement>('[data-card-name]').forEach(card => { card.hidden = !card.dataset.cardName!.includes(query); }); };
 }
 async function addProject() {
@@ -149,18 +190,69 @@ async function openProject(id: string) {
   if (id !== projectId) editor.close(); projectId = id;
   await navigate('editor'); await renderTree();
 }
+async function transferEntries(entries: FileEntry[], destination: string, copy: boolean) {
+  const id = projectId;
+  let completed = 0;
+  try {
+    for (const entry of entries) {
+      const transferredPath = await editor.transfer(id, entry.path, destination, copy);
+      completed++;
+      if (!copy && id === projectId) remapExplorer(entry.path, transferredPath);
+    }
+    notify(`${completed} item(s) ${copy ? 'copied (saved disk contents)' : 'moved'}.`);
+  } catch (error) {
+    throw new Error(`${completed} of ${entries.length} item(s) completed. ${String(error)}`);
+  } finally {
+    if (id === projectId) { if (destination) expandedFolders.add(destination); await renderTree(); }
+  }
+}
+function remapExplorer(source: string, destination: string) {
+  for (const path of [...expandedFolders]) { expandedFolders.delete(path); expandedFolders.add(movedPath(path, source, destination)); }
+  explorerSelection.remap(source, destination);
+}
+function renameEntry(entry: FileEntry) {
+  const id = projectId;
+  editName(element('#file-tree'), entry.name, `Rename ${entry.name}`, async name => {
+    const path = await editor.rename(id, entry.path, name);
+    if (id === projectId) { remapExplorer(entry.path, path); await renderTree(); }
+  }, !entry.directory);
+}
+function createEntry(parent: string, folder: boolean) {
+  const id = projectId;
+  editName(element('#file-tree'), '', `${folder ? 'New folder' : 'New file'} in ${parent || project().name}`, async name => {
+    if (!name || /[\\/]/.test(name)) throw new Error('Enter a single name.');
+    const path = parent ? `${parent}/${name}` : name;
+    if (folder) await invoke('create_folder', { projectId: id, parent, name }); else await invoke('create_file', { projectId: id, relative: path });
+    if (id === projectId) { if (parent) expandedFolders.add(parent); await renderTree(); if (!folder) await editor.open(id, path, true); }
+  });
+}
+const explorerSelection = new ExplorerSelection(element('.file-sidebar'), {
+  transfer: transferEntries, rename: renameEntry, create: createEntry, report: notify,
+  open: (entry, side) => void perform(() => editor.open(projectId, entry.path, true, false, side ? 1 : editor.activeGroup)),
+});
+const explorerDrag = new ExplorerDrag((entries, destination, copy) => perform(() => transferEntries(entries, destination, copy)), entry => explorerSelection.forDrag(entry));
+const expandedFolders = new Set<string>();
+let treeProjectId = '';
 async function renderTree() {
-  const revision = ++treeRevision; const id = projectId; const tree = element('#file-tree'); tree.replaceChildren();
+  explorerDrag.reset(); explorerSelection.activate(projectId);
+  if (treeProjectId !== projectId) { expandedFolders.clear(); treeProjectId = projectId; }
+  explorerDrag.attachTarget(element('#explorer-root'), '');
+  element('#explorer-root').title = 'Drop here to move to project root. Hold Ctrl (Option on macOS) to copy.';
+  const revision = ++treeRevision; const id = projectId; const tree = element('#file-tree'); tree.replaceChildren(); explorerDrag.attachTarget(tree, '');
   async function load(relative: string, parent: HTMLElement) {
     const entries = await invoke<FileEntry[]>('list_files', { projectId: id, relative }); if (id !== projectId || revision !== treeRevision) return;
     for (const entry of entries) {
       if (entry.directory) {
         const details = document.createElement('details'); const summary = document.createElement('summary'); summary.innerHTML = folderIconMarkup(); const label = document.createElement('span'); label.textContent = entry.name; summary.append(label); summary.title = entry.path; details.append(summary); parent.append(details);
+        explorerSelection.attach(summary, entry); summary.onclick = event => { if (!explorerSelection.click(event, entry)) event.preventDefault(); };
+        explorerDrag.attachSource(summary, entry); explorerDrag.attachTarget(summary, entry.path, () => { details.open = true; });
         let loaded = false;
-        details.ontoggle = () => { if (details.open && !loaded) { loaded = true; const children = document.createElement('div'); children.className = 'tree-children'; details.append(children); void load(entry.path, children).catch(e => { loaded = false; children.remove(); notify(String(e)); }); } };
+        details.ontoggle = () => { summary.setAttribute('aria-expanded', String(details.open)); if (details.open) expandedFolders.add(entry.path); else expandedFolders.delete(entry.path); if (details.open && !loaded) { loaded = true; const children = document.createElement('div'); children.className = 'tree-children'; explorerDrag.attachTarget(children, entry.path); details.append(children); void load(entry.path, children).catch(e => { loaded = false; children.remove(); notify(String(e)); }); } };
+        details.open = expandedFolders.has(entry.path); summary.setAttribute('aria-expanded', String(details.open));
       } else {
         const button = document.createElement('button'); button.className = 'file-button'; button.innerHTML = fileIconMarkup(entry.path); const label = document.createElement('span'); label.className = 'file-label'; label.textContent = entry.name; button.append(label); button.title = entry.path; button.setAttribute('aria-label', `${entry.name} (${fileIconFor(entry.path).label})`);
-        button.onclick = () => void perform(() => editor.open(id, entry.path));
+        explorerSelection.attach(button, entry); explorerDrag.attachSource(button, entry); explorerDrag.attachTarget(button, relative);
+        button.onclick = event => { if (explorerSelection.click(event, entry)) void perform(async () => { await editor.open(id, entry.path); button.focus(); }); };
         button.ondblclick = () => void perform(() => editor.open(id, entry.path, true)); parent.append(button);
       }
     }
@@ -168,40 +260,70 @@ async function renderTree() {
   }
   await load('', tree);
 }
+let draggedTab: { id: number; group: number } | undefined;
 function renderEditorTabs() {
-  const host = element('#editor-tabs');
-  host.hidden = editor.tabs.length === 0;
-  for (const node of Array.from(host.children)) {
-    if (!editor.tabs.some(tab => String(tab.id) === (node as HTMLElement).dataset.tabId)) node.remove();
-  }
-  for (const [index, tab] of editor.tabs.entries()) {
-    let node = Array.from(host.children).find(child => (child as HTMLElement).dataset.tabId === String(tab.id)) as HTMLElement | undefined;
-    if (!node) {
-      node = document.createElement('div'); node.className = 'editor-tab'; node.dataset.tabId = String(tab.id);
-      const select = document.createElement('button'); select.className = 'editor-tab-select'; select.setAttribute('role', 'tab'); select.innerHTML = fileIconMarkup(tab.path); const name = document.createElement('span'); name.className = 'tab-file-name'; name.textContent = tab.path.split('/').pop()!; const dirty = document.createElement('span'); dirty.className = 'tab-dirty'; dirty.textContent = '●'; dirty.setAttribute('aria-hidden', 'true'); select.append(name, dirty);
-      select.onclick = () => void perform(() => editor.open(tab.projectId, tab.path));
-      select.ondblclick = () => editor.pin(tab);
-      select.onkeydown = event => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const index = editor.tabs.indexOf(tab);
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? editor.tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + editor.tabs.length) % editor.tabs.length;
-        const target = editor.tabs[next];
-        void perform(async () => { await editor.open(target.projectId, target.path); host.querySelector<HTMLButtonElement>(`[data-tab-id="${target.id}"] .editor-tab-select`)?.focus(); });
-      };
-      const close = document.createElement('button'); close.className = 'editor-tab-close'; close.textContent = '×';
-      close.onclick = () => void perform(async () => { if (editor.isDirty(tab) && !await confirmDiscard(`Close ${tab.path} and discard its unsaved changes?`)) return; editor.closeTab(tab); });
-      node.append(select, close); host.append(node);
+  for (const [groupIndex, group] of editor.groups.entries()) {
+    const host = element(groupIndex ? '#editor-tabs-secondary' : '#editor-tabs');
+    host.hidden = group.tabs.length === 0;
+    for (const node of Array.from(host.children)) if (!group.tabs.some(tab => String(tab.id) === (node as HTMLElement).dataset.tabId)) node.remove();
+    const drop = (event: DragEvent, before?: typeof editor.file) => {
+      if (!draggedTab) return; event.preventDefault(); event.stopPropagation();
+      const tab = editor.tabs.find(tab => tab.id === draggedTab!.id);
+      if (tab) editor.reorder(tab, draggedTab.group, groupIndex, before);
+      draggedTab = undefined;
+    };
+    host.ondragover = event => { if (draggedTab) { event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'; } };
+    host.ondrop = event => drop(event);
+    for (const [index, tab] of group.tabs.entries()) {
+      let node = Array.from(host.children).find(child => (child as HTMLElement).dataset.tabId === String(tab.id)) as HTMLElement | undefined;
+      if (!node) {
+        node = document.createElement('div'); node.className = 'editor-tab'; node.dataset.tabId = String(tab.id); node.draggable = true;
+        node.ondragstart = event => { draggedTab = { id: tab.id, group: groupIndex }; if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-aurea-tab', String(tab.id)); } };
+        node.ondragend = () => { draggedTab = undefined; };
+        node.ondragover = event => { if (draggedTab) event.preventDefault(); };
+        node.ondrop = event => drop(event, tab);
+        const select = document.createElement('button'); select.className = 'editor-tab-select'; select.setAttribute('role', 'tab');
+        select.innerHTML = '<span class="tab-icon"></span><span class="tab-file-name"></span><span class="tab-dirty" aria-hidden="true">●</span>';
+        select.onclick = () => void perform(() => editor.open(tab.projectId, tab.path, false, false, groupIndex));
+        select.ondblclick = () => editor.pin(tab);
+        select.onkeydown = event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const index = group.tabs.indexOf(tab);
+          if (event.altKey && ['ArrowLeft', 'ArrowRight'].includes(event.key)) {
+            const next = event.key === 'ArrowLeft' ? index - 1 : index + 2;
+            if (next >= 0) editor.reorder(tab, groupIndex, groupIndex, group.tabs[next]);
+          } else {
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? group.tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + group.tabs.length) % group.tabs.length;
+            const target = group.tabs[next];
+            void perform(async () => { await editor.open(target.projectId, target.path, false, false, groupIndex); host.querySelector<HTMLButtonElement>(`[data-tab-id="${target.id}"] .editor-tab-select`)?.focus(); });
+          }
+        };
+        const closeTab = () => void perform(async () => {
+          const last = editor.groups.filter(value => value.tabs.includes(tab)).length === 1;
+          if (last && editor.isDirty(tab) && !await confirmDiscard(`Close ${tab.path} and discard its unsaved changes?`)) return;
+          editor.closeTab(tab, groupIndex);
+        });
+        const close = document.createElement('button'); close.className = 'editor-tab-close'; close.textContent = '×'; close.onclick = closeTab;
+        node.onauxclick = event => { if (event.button === 1) { event.preventDefault(); closeTab(); } };
+        node.oncontextmenu = event => { event.preventDefault(); showContextMenu(event.clientX, event.clientY, [
+          { label: 'Split Right', shortcut: 'Ctrl+\\', run: () => editor.split(tab) },
+          { label: groupIndex ? 'Move to Left Group' : 'Move to Right Group', run: () => editor.reorder(tab, groupIndex, 1 - groupIndex) },
+          { label: 'Keep Open', run: () => editor.pin(tab) },
+          { label: 'Close', shortcut: 'Ctrl+W', run: closeTab },
+        ], select); };
+        node.append(select, close); host.append(node);
+      }
+      if (host.children[index] !== node) host.insertBefore(node, host.children[index] ?? null);
+      const active = group.active === tab; node.classList.toggle('active', active); node.classList.toggle('temporary', !tab.pinned);
+      const select = node.querySelector<HTMLButtonElement>('.editor-tab-select')!;
+      select.querySelector('.tab-icon')!.innerHTML = fileIconMarkup(tab.path);
+      select.querySelector('.tab-file-name')!.textContent = tab.path.split(/[\\/]/).pop()!;
+      select.querySelector<HTMLElement>('.tab-dirty')!.hidden = !editor.isDirty(tab);
+      select.setAttribute('aria-label', `${tab.path}${editor.isDirty(tab) ? ' — Unsaved changes' : ''}`);
+      select.title = tab.path; select.setAttribute('aria-selected', String(active)); select.tabIndex = active ? 0 : -1;
+      node.querySelector('.editor-tab-close')!.setAttribute('aria-label', `Close ${tab.path}`);
     }
-    if (host.children[index] !== node) host.insertBefore(node, host.children[index] ?? null);
-    const active = editor.file === tab;
-    node.classList.toggle('active', active); node.classList.toggle('temporary', !tab.pinned);
-    const select = node.querySelector<HTMLButtonElement>('.editor-tab-select')!;
-    select.querySelector<HTMLElement>('.tab-dirty')!.hidden = !editor.isDirty(tab);
-    select.setAttribute('aria-label', `${tab.path} (${fileIconFor(tab.path).label})${editor.isDirty(tab) ? ' — Unsaved changes' : ''}`);
-    select.title = `${tab.path}${tab.pinned ? '' : ' — Preview (double-click to keep open)'}`;
-    select.setAttribute('aria-selected', String(active)); select.tabIndex = active ? 0 : -1;
-    node.querySelector('.editor-tab-close')!.setAttribute('aria-label', `Close ${tab.path}`);
   }
 }
 function updateCursorPosition() {
@@ -211,15 +333,33 @@ function updateCursorPosition() {
 }
 function updateEditorTitle() {
   renderEditorTabs();
-  document.querySelectorAll<HTMLElement>('.file-button').forEach(button => button.classList.toggle('selected', button.title === editor.file?.path));
-  documentPreview.update(editor.file ? `${editor.file.projectId}/${editor.file.path}` : '', editor.view?.state.doc.toString() ?? '');
+  const previews = [documentPreview, secondaryDocumentPreview];
+  for (const [index, group] of editor.groups.entries()) {
+    const suffix = index ? '-secondary' : ''; const file = group.active;
+    const groupHost = element(`[data-group="${index}"]`);
+    groupHost.classList.toggle('focused-group', editor.activeGroup === index);
+    if (index) groupHost.hidden = !group.tabs.length;
+    const source = file?.state.doc.toString() ?? '';
+    previews[index].update(file && !file.media ? `${file.projectId}/${file.path}` : '', source);
+    mediaPreviews[index].update(file);
+    const code = element(`#code-editor${suffix}`);
+    if (file?.media) {
+      const svg = file.media === 'image/svg+xml'; code.hidden = !svg;
+      element(`#document-modes${suffix}`).hidden = true;
+    }
+    element(`#editor-title${suffix}`).textContent = file ? `${editor.isDirty(file) ? '● ' : ''}${file.path}` : 'Select a file';
+    groupHost.querySelector<HTMLElement>('.document-workspace')!.hidden = !file;
+  }
+  element('.editor-groups').classList.toggle('has-split', editor.groups[1].tabs.length > 0);
+  element('#group-resize').hidden = editor.groups[1].tabs.length === 0;
   updateCursorPosition();
-  element('#status-file').textContent = editor.file ? `UTF-8 · ${editor.languageName}` : 'UTF-8 · Rust + Tauri';
-  element('#editor-title').textContent = editor.file ? `${editor.dirty ? '● ' : ''}${editor.file.path}` : 'Select a file';
-  element('#editor-empty').hidden = !!editor.file;
-  element('.document-workspace').hidden = !editor.file;
-  element<HTMLButtonElement>('#save-file').disabled = !editor.dirty;
-  element<HTMLButtonElement>('#reload-file').disabled = !editor.file;
+  const saveState = !editor.file ? 'Ready' : editor.file.conflicted ? 'File changed on disk' : editor.hasUnsavedChanges ? 'Unsaved changes' : editor.isBinary(editor.file) ? 'Preview' : 'All changes saved';
+  if (element('#status-text').textContent !== saveState) element('#status-text').textContent = saveState;
+  element('#status-file').textContent = editor.file ? `${editor.isBinary(editor.file) ? 'Preview' : 'UTF-8'} · ${editor.languageName}` : 'UTF-8 · Rust + Tauri';
+  element('#editor-empty').hidden = !!editor.groups[0].active;
+  element<HTMLButtonElement>('#save-file').disabled = !editor.groups[0].active || !editor.isDirty(editor.groups[0].active);
+  element<HTMLButtonElement>('#save-secondary').disabled = !editor.groups[1].active || !editor.isDirty(editor.groups[1].active);
+  element<HTMLButtonElement>('#reload-file').disabled = !editor.groups[0].active;
 }
 function formDialog(title: string, fields: string, submit: (data: FormData) => Promise<void>) {
   const modal = element<HTMLDialogElement>('#modal');
@@ -281,21 +421,24 @@ async function updateWindowControls() {
   button.title = maximized ? 'Restore' : 'Maximize';
   button.setAttribute('aria-label', button.title);
 }
-bind('[data-page]', b => navigate(stage === 'ide' && page === b.dataset.page && page !== 'editor' ? 'editor' : b.dataset.page as Page));
-bind('#start-shell, #new-terminal, #empty-terminal', () => { desktop(); return terminals.start(project(), 'shell'); });
+document.querySelectorAll<HTMLButtonElement>('[data-page]').forEach(button => { button.onclick = () => { const next = button.dataset.page as Page; if (next !== page) void perform(() => navigate(next)); }; });
+bind('#new-terminal, #empty-terminal', () => { desktop(); return terminals.start(project(), 'shell'); });
+bind('#start-shell', () => { if (!element('#terminal-panel').hidden) terminals.hide(); else if (terminals.sessions.length) terminals.show(); else return terminals.start(project(), 'shell'); });
 bind('#back-launcher', () => navigate('projects')); bind('#ide-reveal', () => invoke('reveal_project', { projectId }));
 bind('#new-workspace', newWorkspace); bind('#open-top', addProject);
-bind('#new-file', () => { const current = project(); formDialog('New file', '<label>Path relative to the project<input name="path" placeholder="e.g. src/main.rs" required></label><p class="muted">The destination folder must exist. Existing files will not be overwritten.</p>', async data => { const path = String(data.get('path')); await invoke('create_file', { projectId: current.id, relative: path }); await renderTree(); await editor.open(current.id, path, true); }); });
-element('#document-preview').onclick = event => {
+bind('#new-folder', () => createEntry(explorerSelection.currentFolder(), true));
+bind('#new-file', () => createEntry(explorerSelection.currentFolder(), false));
+for (const [index, selector] of ['#document-preview', '#document-preview-secondary'].entries()) element(selector).onclick = event => {
   const link = (event.target as HTMLElement).closest<HTMLElement>('[data-document-link]');
-  if (!link || !editor.file) return;
+  const file = editor.groups[index].active;
+  if (!link || !file) return;
   void perform(async () => {
-    const target = resolveDocumentLink(editor.file!.path, link.dataset.documentLink!);
+    const target = resolveDocumentLink(file.path, link.dataset.documentLink!);
     if (target.external) { await invoke('open_document_link', { url: target.external }); return; }
-    if (target.path) await editor.open(editor.file!.projectId, target.path);
+    if (target.path) await editor.open(file.projectId, target.path, false, false, index);
   });
 };
-bind('#save-file', () => editor.save()); bind('#reload-file', async () => { if (editor.file && await canDiscard(false)) await editor.reload(); }); bind('#refresh-files', renderTree);
+bind('#save-file', () => { editor.focusGroup(0); return editor.save(); }); bind('#reload-file', async () => { editor.focusGroup(0); if (editor.file && await canDiscard(false)) await editor.reload(); }); bind('#refresh-files', renderTree);
 bind('#hide-terminal', () => terminals.hide()); bind('#close-terminal', async () => { if (await confirmAction('Close this terminal? The running process will be stopped.')) await terminals.closeSelected(); });
 bind('#show-terminal', () => { desktop(); if (terminals.sessions.length) terminals.show(); else return terminals.start(project(), 'shell'); });
 element<HTMLSelectElement>('#workspace-select').onchange = event => void perform(async () => { const next = (event.target as HTMLSelectElement).value; if (!await canDiscard()) { refreshSidebar(); return; } workspaceId = next; projectId = ''; editor.close(); await navigate('projects'); });
@@ -335,6 +478,8 @@ async function openCommands() {
     action('Go to file', 'Ctrl P', openQuickFiles),
     action('Save current file', 'Ctrl S', () => editor.save()),
     action('New file', 'Project', () => element<HTMLButtonElement>('#new-file').click()),
+    action('Split editor right', 'Ctrl+\\', () => editor.split()),
+    action('Close secondary editor group', 'Editor', () => editor.closeGroup()),
     action('Toggle explorer', 'Ctrl B', toggleExplorer),
     action('New terminal', 'Project', () => terminals.start(project(), 'shell')),
     action('Source control', 'Git', () => navigate('git')),
@@ -345,10 +490,42 @@ async function openCommands() {
   ] }));
 }
 content.addEventListener('click', event => { if ((event.target as HTMLElement).closest('#close-tool')) void perform(() => navigate('editor')); });
+bind('#appearance-button', button => {
+  const rect = button.getBoundingClientRect();
+  showContextMenu(rect.right - 220, rect.bottom + 6, (['system', 'light', 'dark'] as Appearance[]).map(value => ({
+    label: value === 'system' ? 'Follow system' : value === 'light' ? 'Light' : 'Dark', checked: appearance() === value, run: () => setAppearance(value),
+  })), button);
+});
+bind('#workspace-more', button => {
+  const rect = button.getBoundingClientRect();
+  showContextMenu(rect.right - 230, rect.bottom + 6, [
+    { label: 'Browse all actions', shortcut: 'Ctrl Shift P', run: () => void perform(openCommands) },
+    { label: 'New terminal', run: () => void perform(() => terminals.start(project(), 'shell')) },
+    { label: 'Show project folder', run: () => void perform(() => invoke('reveal_project', { projectId })) },
+    { label: 'Merge editor groups', disabled: !editor.groups[1].tabs.length, run: () => editor.closeGroup() },
+    { label: 'All projects', run: () => void perform(() => navigate('projects')) },
+  ], button);
+});
+new MutationObserver(() => element('#start-shell').setAttribute('aria-pressed', String(!element('#terminal-panel').hidden))).observe(element('#terminal-panel'), { attributes: true, attributeFilter: ['hidden'] });
 bind('#quick-open, #empty-search', openQuickFiles);
 bind('#commands, #empty-commands', openCommands);
 bind('#toggle-explorer', toggleExplorer);
+bind('#split-editor', () => editor.split());
+bind('#close-group', () => editor.closeGroup());
+bind('#save-secondary', () => { editor.focusGroup(1); return editor.save(); });
+for (const [index] of editor.groups.entries()) {
+  const host = element(`[data-group="${index}"]`);
+  host.addEventListener('pointerdown', () => editor.focusGroup(index));
+  host.addEventListener('dragover', event => { if (draggedTab) event.preventDefault(); });
+  host.addEventListener('drop', event => {
+    if (!draggedTab) return; event.preventDefault();
+    const tab = editor.tabs.find(tab => tab.id === draggedTab!.id);
+    if (tab) editor.reorder(tab, draggedTab.group, index); draggedTab = undefined;
+  });
+}
+
 bind('#collapse-folders', () => document.querySelectorAll<HTMLDetailsElement>('#file-tree details').forEach(node => { node.open = false; }));
+resizePanel(element('#group-resize'), element('.editor-groups'), '--primary-group-width', 'aurea.group-width', 500, 220, () => Math.max(220, (element('.editor-groups').clientWidth || innerWidth - 300) - 240), 'x');
 resizePanel(element('#explorer-resize'), app, '--explorer-width', 'aurea.explorer-width', 240, 160, () => Math.min(480, window.innerWidth * .4), 'x');
 resizePanel(element('#terminal-resize'), app, '--terminal-height', 'aurea.terminal-height', 240, 100, () => window.innerHeight * .65, 'y');
 window.addEventListener('keydown', event => {
@@ -356,9 +533,11 @@ window.addEventListener('keydown', event => {
   if (event.ctrlKey || event.metaKey) {
     if (event.key.toLowerCase() === 'p') { event.preventDefault(); void perform(event.shiftKey ? openCommands : openQuickFiles); }
     else if (event.key.toLowerCase() === 'b') { event.preventDefault(); toggleExplorer(); }
+    else if (event.key === '\\') { event.preventDefault(); editor.split(); }
+    else if (event.key === '1' || event.key === '2') { event.preventDefault(); const index = Number(event.key) - 1; if (editor.groups[index].active) { editor.focusGroup(index); editor.groups[index].view?.focus(); } }
     else if (event.key === '`') { event.preventDefault(); if (!element('#terminal-panel').hidden) terminals.hide(); else element<HTMLButtonElement>('#show-terminal').click(); }
     else if (event.key.toLowerCase() === 'w' && page !== 'database' && editor.file) {
-      event.preventDefault(); element<HTMLButtonElement>('.editor-tab.active .editor-tab-close').click();
+      event.preventDefault(); element<HTMLButtonElement>(`[data-group="${editor.activeGroup}"] .editor-tab.active .editor-tab-close`).click();
     }
   }
 });

@@ -37,6 +37,7 @@ def wait_for(script, timeout=15):
         if execute('return ' + script):
             return
         time.sleep(.15)
+    print('Timeout diagnostics:', execute('return {toast:document.querySelector("#toast")?.textContent, media:document.querySelector("#media-preview")?.textContent, title:document.querySelector("#editor-title")?.textContent}'))
     raise AssertionError('Timed out: ' + script)
 
 def click(selector):
@@ -80,6 +81,14 @@ else:
 
 with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
     project = Path(directory)
+    for name in ['preview.png', 'preview.webp', 'preview.pdf']:
+        (project / name).write_bytes((Path('/app/tests/fixtures') / name).read_bytes())
+    (project / 'preview.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><script>window.svgExecuted=true</script><rect width="40" height="30" fill="blue"/></svg>')
+    (project / 'multi-a.txt').write_text('alpha')
+    (project / 'multi-b.txt').write_text('beta')
+    (project / 'clipboard-target').mkdir()
+    (project / 'transfer-target').mkdir()
+    (project / 'transfer.txt').write_text('saved transfer content')
     (project / 'main.rs').write_text('fn main() { println!("Hello Aurea"); }\n')
     (project / 'README.md').write_text('# Project guide\n\n**Hello documentation**\n\n| Tool | State |\n| --- | --- |\n| IDE | Ready |\n')
     env_content = 'TOKEN=first-test-secret\nPASSWORD="second-test-secret"\nMULTI="line-one\nline-two"\n'
@@ -129,6 +138,188 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         assert execute('return document.querySelector(\'.file-button[title="main.rs"] > svg\').dataset.fileKind') == 'rust'
         assert execute('return document.querySelector(\'.file-button[title="example.py"] > svg\').dataset.fileKind') == 'python'
         assert execute('return document.querySelector(\'.file-button[title=".env"] > svg\').dataset.fileKind') == 'env'
+        # Exercise DOM drag events through the real WebKit frontend and Rust filesystem.
+        def drag_entry(source, target, copy=False):
+            execute("""
+                const source = document.querySelector(arguments[0]);
+                const target = document.querySelector(arguments[1]);
+                const dataTransfer = new DataTransfer();
+                source.dispatchEvent(new DragEvent('dragstart', {bubbles:true, cancelable:true, dataTransfer}));
+                target.dispatchEvent(new DragEvent('dragover', {bubbles:true, cancelable:true, dataTransfer, ctrlKey:arguments[2]}));
+                target.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer, ctrlKey:arguments[2]}));
+            """, source, target, copy)
+
+        click('.file-button[title="transfer.txt"]')
+        wait_for('document.querySelector("#code-editor .cm-content") !== null')
+        input_text('#code-editor .cm-content', 'unsaved ')
+        drag_entry('.file-button[title="transfer.txt"]', 'summary[title="transfer-target"]', True)
+        wait_for("""document.querySelector('.file-button[title="transfer-target/transfer.txt"]') !== null""")
+        assert (project / 'transfer-target/transfer.txt').read_text() == 'saved transfer content'
+        assert (project / 'transfer.txt').exists()
+        drag_entry('.file-button[title="transfer.txt"]', '#explorer-root', True)
+        wait_for("""document.querySelector('.file-button[title="transfer copy.txt"]') !== null""")
+        drag_entry('.file-button[title="transfer copy.txt"]', 'summary[title="transfer-target"]')
+        wait_for("""document.querySelector('.file-button[title="transfer-target/transfer copy.txt"]') !== null""")
+        assert not (project / 'transfer copy.txt').exists()
+        # A collision leaves both source and destination untouched.
+        drag_entry('.file-button[title="transfer.txt"]', 'summary[title="transfer-target"]')
+        wait_for('document.querySelector("#toast").textContent.includes("already exists")')
+        assert (project / 'transfer.txt').read_text() == 'saved transfer content'
+        assert 'unsaved' in execute('return document.querySelector("#code-editor .cm-content").textContent')
+        # Move the destination folder and ensure its expanded state is preserved.
+        (project / 'outer').mkdir()
+        click('#refresh-files')
+        wait_for("""document.querySelector('summary[title="outer"]') !== null""")
+        drag_entry('summary[title="transfer-target"]', 'summary[title="outer"]')
+        wait_for("""document.querySelector('.file-button[title="outer/transfer-target/transfer.txt"]') !== null""")
+        drag_entry('.file-button[title="transfer.txt"]', 'summary[title="outer"]')
+        wait_for('document.querySelector("#editor-title").textContent.includes("outer/transfer.txt")')
+        assert 'unsaved' in execute('return document.querySelector("#code-editor .cm-content").textContent')
+        click('#save-file')
+        wait_for('document.querySelector(".tab-dirty").hidden')
+        assert 'unsaved' in (project / 'outer/transfer.txt').read_text()
+        assert not (project / 'transfer.txt').exists()
+        click('button[aria-label="Close outer/transfer.txt"]')
+        def key(selector, key, ctrl=False, shift=False):
+            execute("document.querySelector(arguments[0]).focus();", selector)
+            value = {'F2': '\ue032'}.get(key, key)
+            actions = []
+            if ctrl: actions.append({'type': 'keyDown', 'value': '\ue009'})
+            if shift: actions.append({'type': 'keyDown', 'value': '\ue008'})
+            actions.extend([{'type': 'keyDown', 'value': value}, {'type': 'keyUp', 'value': value}])
+            if shift: actions.append({'type': 'keyUp', 'value': '\ue008'})
+            if ctrl: actions.append({'type': 'keyUp', 'value': '\ue009'})
+            request('POST', f'/session/{SESSION}/actions', {'actions': [{'type': 'key', 'id': 'keyboard', 'actions': actions}]})
+
+        # Multiple selection, clipboard shortcuts, and partial-operation reporting.
+        click('.file-button[title="multi-a.txt"]')
+        execute("document.querySelector('.file-button[title=\"multi-b.txt\"]').dispatchEvent(new MouseEvent('click', {ctrlKey:true, bubbles:true}));")
+        assert execute('return document.querySelectorAll("#file-tree .selected").length') == 2
+        key('.file-sidebar', 'c', True)
+        click('summary[title="clipboard-target"]')
+        key('.file-sidebar', 'v', True)
+        wait_for("""document.querySelector('.file-button[title="clipboard-target/multi-b.txt"]') !== null""")
+        assert (project / 'clipboard-target/multi-a.txt').read_text() == 'alpha'
+        assert (project / 'clipboard-target/multi-b.txt').read_text() == 'beta'
+        # A multiple-selection drag copies both source files.
+        click('.file-button[title="multi-a.txt"]')
+        execute("document.querySelector('.file-button[title=\"multi-b.txt\"]').dispatchEvent(new MouseEvent('click', {ctrlKey:true, bubbles:true}));")
+        drag_entry('.file-button[title="multi-a.txt"]', 'summary[title="outer"]', True)
+        wait_for("""document.querySelector('.file-button[title="outer/multi-b.txt"]') !== null""")
+        assert (project / 'outer/multi-a.txt').read_text() == 'alpha'
+        assert (project / 'outer/multi-b.txt').read_text() == 'beta'
+        # F2 keeps unsaved text and refreshes syntax after the extension changes.
+        click('.file-button[title="multi-a.txt"]')
+        input_text('#code-editor .cm-content', 'unsaved ')
+        click('.file-button[title="multi-a.txt"]')
+        key('.file-sidebar', 'F2')
+        wait_for('document.querySelector(".entry-name-input") !== null')
+        execute('document.querySelector(".entry-name-input").value = "renamed.py";')
+        click('.inline-name button[type="submit"]')
+        wait_for('document.querySelector(".inline-name") === null')
+        wait_for('document.querySelector("#status-file").textContent.includes("Python")')
+        assert 'unsaved' in execute('return document.querySelector("#code-editor .cm-content").textContent')
+        assert not (project / 'multi-a.txt').exists()
+        click('#save-file')
+        wait_for('document.querySelectorAll(".tab-dirty:not([hidden])").length === 0')
+        assert 'unsaved' in (project / 'renamed.py').read_text()
+        # Shared document updates across groups; closing the second group preserves tabs.
+        click('#split-editor')
+        wait_for('document.querySelector("#code-editor-secondary .cm-content") !== null')
+        input_text('#code-editor-secondary .cm-content', 'shared ')
+        wait_for('document.querySelector("#code-editor .cm-content").textContent.includes("shared")')
+        key('#code-editor-secondary .cm-content', 'z', True)
+        wait_for('!document.querySelector("#code-editor .cm-content").textContent.includes("shared")')
+        key('#code-editor-secondary .cm-content', 'z', True, True)
+        wait_for('document.querySelector("#code-editor .cm-content").textContent.includes("shared")')
+        click('#save-secondary')
+        wait_for('document.querySelectorAll(".tab-dirty:not([hidden])").length === 0')
+        assert 'shared' in (project / 'renamed.py').read_text()
+        Path('/app/artifacts').mkdir(exist_ok=True)
+        Path('/app/artifacts/editor-split-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        for theme in ['Light', 'Dark']:
+            click('#appearance-button')
+            execute("[...document.querySelectorAll('.context-menu button')].find(button => button.textContent===arguments[0]).click();", theme)
+            wait_for(f'document.documentElement.dataset.appearance === "{theme.lower()}"')
+            expected_background = 'rgb(28, 28, 30)' if theme == 'Dark' else 'rgb(255, 255, 255)'
+            wait_for(f'getComputedStyle(document.querySelector("#quick-open")).backgroundColor === "{expected_background}"')
+            Path(f'/app/artifacts/editor-{theme.lower()}-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        click('#appearance-button')
+        execute("[...document.querySelectorAll('.context-menu button')].find(button => button.textContent==='Light').click();")
+        click('#close-group')
+        assert execute("""return document.querySelector('[data-group="1"]').hidden""")
+        click('button[aria-label="Close renamed.py"]')
+        # Cut and paste move the file, preserving its saved contents.
+        click('.file-button[title="renamed.py"]')
+        key('.file-sidebar', 'x', True)
+        assert execute('return document.querySelector(".cut-entry") !== null')
+        click('summary[title="clipboard-target"]')
+        key('.file-sidebar', 'v', True)
+        wait_for("""document.querySelector('.file-button[title="clipboard-target/renamed.py"]') !== null""")
+        assert not (project / 'renamed.py').exists()
+        click('button[aria-label="Close clipboard-target/renamed.py"]')
+        # Context menu creates a real folder without interpolating filenames into HTML.
+        execute("document.querySelector('summary[title=\"clipboard-target\"]').dispatchEvent(new MouseEvent('contextmenu', {clientX:120, clientY:180, bubbles:true, cancelable:true}));")
+        wait_for('document.querySelector(".context-menu") !== null')
+        execute("[...document.querySelectorAll('.context-menu button')].find(b=>b.textContent.includes('New Folder')).click();")
+        input_text('.entry-name-input', 'new-folder')
+        click('.inline-name button[type="submit"]')
+        wait_for('document.querySelector(".inline-name") === null')
+        assert (project / 'clipboard-target/new-folder').is_dir()
+        wait_for("""document.querySelector('summary[title="clipboard-target/new-folder"]') !== null""")
+        # Inline validation retains the name and allows correction or Escape.
+        click('.file-button[title="multi-b.txt"]')
+        key('.file-sidebar', 'F2')
+        execute('document.querySelector(".entry-name-input").value = "main.rs";')
+        click('.inline-name button[type="submit"]')
+        wait_for('document.querySelector(".entry-name-input")?.getAttribute("aria-invalid") === "true"')
+        assert (project / 'multi-b.txt').read_text() == 'beta'
+        input_text('.entry-name-input', '\ue00c')
+        wait_for('document.querySelector(".inline-name") === null')
+        for theme in ['Dark', 'Light']:
+            click('#appearance-button')
+            execute("[...document.querySelectorAll('.context-menu button')].find(button => button.textContent===arguments[0]).click();", theme)
+            wait_for(f'document.documentElement.dataset.appearance === "{theme.lower()}"')
+            assert execute('return localStorage.getItem("aurea.appearance")') == theme.lower()
+        assert execute('return document.querySelector("#ide-header").contains(document.querySelector("#ide-navigation"))')
+        # Reorder pinned tabs and move a tab between editor groups.
+        for name in ['multi-b.txt', 'example.py']:
+            execute("document.querySelector(arguments[0]).dispatchEvent(new MouseEvent('dblclick', {bubbles:true}));", f'.file-button[title="{name}"]')
+            wait_for(f'document.querySelector("#editor-title").textContent === "{name}"')
+        execute("""
+            const tabs = [...document.querySelectorAll('#editor-tabs .editor-tab')];
+            const source = tabs.find(t=>t.querySelector('.tab-file-name').textContent==='example.py');
+            const target = tabs.find(t=>t.querySelector('.tab-file-name').textContent==='multi-b.txt');
+            const dataTransfer = new DataTransfer();
+            source.dispatchEvent(new DragEvent('dragstart', {bubbles:true, dataTransfer}));
+            target.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer}));
+        """)
+        assert execute('return document.querySelector("#editor-tabs .tab-file-name").textContent') == 'example.py'
+        execute("document.querySelector('#editor-tabs .editor-tab').dispatchEvent(new MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:400, clientY:100}));")
+        execute("[...document.querySelectorAll('.context-menu button')].find(b=>b.textContent==='Move to Right Group').click();")
+        wait_for('document.querySelector("#editor-title-secondary").textContent === "example.py"')
+        assert execute('return document.querySelector("#editor-tabs .tab-file-name").textContent') == 'multi-b.txt'
+        click('#close-group')
+        click('button[aria-label="Close example.py"]')
+        click('button[aria-label="Close multi-b.txt"]')
+        # Read-only images, safe SVG source/preview and paginated local PDFs.
+        for name in ['preview.png', 'preview.webp', 'preview.svg']:
+            print('Preview fixture:', name, flush=True)
+            click(f'.file-button[title="{name}"]')
+            wait_for('document.querySelector("#media-preview img")?.naturalWidth > 0')
+            assert not execute('return Boolean(window.svgExecuted)')
+            if name == 'preview.svg':
+                assert execute('return !document.querySelector("#code-editor").hidden')
+            else:
+                assert execute('return document.querySelector("#code-editor").hidden')
+            click(f'button[aria-label="Close {name}"]')
+        click('.file-button[title="preview.pdf"]')
+        wait_for('document.querySelector("#media-preview canvas")?.dataset.rendered === "true"', 30)
+        assert 'Page 1 / 2' in execute('return document.querySelector("#media-preview").textContent')
+        execute("[...document.querySelectorAll('#media-preview button')].find(b=>b.textContent==='Next page').click();")
+        wait_for('document.querySelector("#media-preview canvas")?.getAttribute("aria-label") === "PDF page 2" && document.querySelector("#media-preview canvas")?.dataset.rendered === "true"')
+        Path('/app/artifacts/pdf-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
+        click('button[aria-label="Close preview.pdf"]')
         click('#quick-open')
         wait_for('document.querySelectorAll("#quick-results button").length > 0')
         input_text('#quick-input', 'main.rs')
@@ -137,7 +328,8 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#editor-title").textContent === "main.rs"')
         assert execute('return document.querySelectorAll(".editor-tab.temporary").length') == 0
         click('button[aria-label="Close main.rs"]')
-        click('#commands')
+        click('#workspace-more')
+        execute("[...document.querySelectorAll('.context-menu button')].find(button => button.textContent.includes('Browse all actions')).click();")
         wait_for('document.querySelectorAll("#quick-results button").length > 0')
         input_text('#quick-input', 'Toggle explorer')
         input_text('#quick-input', '\ue007')
@@ -226,7 +418,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         wait_for('document.querySelector("#code-editor .cm-content").textContent.includes("// edited")')
         assert not execute('return document.querySelector("#save-file").disabled')
         click('#save-file')
-        wait_for('document.querySelector("#save-file").disabled')
+        wait_for('document.querySelectorAll(".tab-dirty:not([hidden])").length === 0')
         click('button[aria-label="Close example.py"]')
         assert execute('return document.querySelectorAll(".editor-tab").length') == 1
 
@@ -254,7 +446,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         input_text('#code-editor .cm-content', 'Updated ')
         wait_for('document.querySelector("#document-preview").textContent.includes("Updated")')
         click('#save-file')
-        wait_for('document.querySelector("#save-file").disabled')
+        wait_for('document.querySelectorAll(".tab-dirty:not([hidden])").length === 0')
         click('[data-document-mode="preview"]')
         assert execute('return document.querySelector("#code-editor").hidden')
         Path('/app/artifacts/document-preview.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))
@@ -287,7 +479,7 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         click('#close-tool')
         assert execute('return document.querySelector("#page-content").hidden')
         click('[data-page="git"]')
-
+        click('[data-page="git"]')
         wait_for('document.querySelector("#git-status")?.textContent.includes("main.rs")')
         invoke('git_action', {'projectId': registered['id'], 'action': 'stage'})
         invoke('git_action', {'projectId': registered['id'], 'action': 'commit', 'message': 'test: verify desktop integration'})
@@ -298,6 +490,14 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         click('.project-title')
         wait_for('document.querySelector("#start-shell")?.offsetParent !== null')
         click('#start-shell')
+        wait_for('document.querySelector(".terminal-tab") !== null')
+        terminal_count = execute('return document.querySelectorAll(".terminal-tab").length')
+        click('#start-shell')
+        wait_for('document.querySelector("#terminal-panel").hidden')
+        click('#start-shell')
+        wait_for('!document.querySelector("#terminal-panel").hidden')
+        assert execute('return document.querySelectorAll(".terminal-tab").length') == terminal_count
+
         wait_for('document.querySelector(".xterm-screen") !== null')
         input_text('.xterm-helper-textarea', 'echo aurea-terminal-smoke\n')
         wait_for('document.querySelector("#terminal-panel").textContent.includes("aurea-terminal-smoke")')
@@ -387,7 +587,7 @@ else: raise SystemExit('Unexpected mutation')
         screenshot = request('GET', f'/session/{SESSION}/screenshot')
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-preview.png').write_bytes(base64.b64decode(screenshot))
-        print('Desktop smoke passed: independent launcher/IDE, workspaces, editor, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection, database queries/grid edits, Docker database command routing and tool detection.')
+        print('Desktop smoke passed: independent launcher/IDE, light/dark appearance, stable navigation, terminal toggle, inline validation/cancel, workspaces, explorer multi-selection/clipboard/drag-drop/rename, editor groups/reordering/shared undo, PNG/WebP/SVG/PDF previews, Git, PTY cleanup, two-project Docker scoping (fixture CLI), foreign action rejection, database queries/grid edits, Docker database command routing and tool detection.')
     except Exception:
         Path('/app/artifacts').mkdir(exist_ok=True)
         Path('/app/artifacts/desktop-failure.png').write_bytes(base64.b64decode(request('GET', f'/session/{SESSION}/screenshot')))

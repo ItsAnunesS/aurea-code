@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { editorAppearance } from './editor-theme';
 import { languageFor } from './languages.mjs';
 import { escapeHtml as html } from './utils.mjs';
 import { resultCsv, changedRows } from './database-utils.mjs';
@@ -92,7 +92,7 @@ export class DatabaseView {
     this.sqlEditor?.destroy(); this.sqlDirty = false;
     const language = await languageFor('query.sql')?.load();
     if (revision !== this.revision) return;
-    this.sqlEditor = new EditorView({ parent: this.el('#db-sql'), state: EditorState.create({ doc: '-- Write SQL here, or open a table in the explorer.\n', extensions: [basicSetup, oneDark, language ?? [], EditorView.lineWrapping, EditorView.updateListener.of(update => { if (update.docChanged) this.sqlDirty = true; }), keymap.of([{ key: 'Mod-s', run: () => { void this.perform(() => this.saveSql()); return true; } },{ key: 'Mod-Enter', run: () => { if (!this.busy) void this.perform(() => this.run()); return true; } }]), EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { fontFamily: 'Consolas, monospace', fontSize: '12px' } })] }) });
+    this.sqlEditor = new EditorView({ parent: this.el('#db-sql'), state: EditorState.create({ doc: '-- Write SQL here, or open a table in the explorer.\n', extensions: [basicSetup, editorAppearance(), language ?? [], EditorView.lineWrapping, EditorView.updateListener.of(update => { if (update.docChanged) this.sqlDirty = true; }), keymap.of([{ key: 'Mod-s', run: () => { void this.perform(() => this.saveSql()); return true; } },{ key: 'Mod-Enter', run: () => { if (!this.busy) void this.perform(() => this.run()); return true; } }]), EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { fontFamily: 'Consolas, monospace', fontSize: '12px' } })] }) });
     await this.refreshConnections(); this.renderTree();
   }
   reset() { this.revision++; this.project = undefined; this.connection = undefined; this.changes.clear(); this.sqlEditor?.destroy(); this.sqlEditor = undefined; this.sqlDirty = false; }

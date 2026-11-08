@@ -14,6 +14,7 @@
       {
         "label": "main",
         "decorations": false,
+        "dragDropEnabled": false,
         "title": "Aurea Code",
         "width": 1440,
         "height": 940,
@@ -22,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost; connect-src ipc: http://ipc.localhost https://api.github.com; font-src 'self'; object-src 'none'; base-uri 'self'; frame-src 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: asset: http://asset.localhost; connect-src ipc: http://ipc.localhost https://api.github.com; font-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-src 'none'"
     }
   },
   "bundle": {

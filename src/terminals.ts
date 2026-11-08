@@ -1,3 +1,4 @@
+import { resolvedAppearance } from './appearance';
 import type { DatabaseTool } from './database-types';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { Terminal } from '@xterm/xterm';
@@ -17,7 +18,10 @@ export class TerminalManager {
     if (this.projectId !== projectId && this.sessions.length) throw new Error('Close terminals before switching projects.');
     this.projectId = projectId;
   }
-  constructor(private panel: HTMLElement, private tabs: HTMLElement, private host: HTMLElement, private report: (message: string) => void) {}
+  constructor(private panel: HTMLElement, private tabs: HTMLElement, private host: HTMLElement, private report: (message: string) => void) {
+    window.addEventListener('appearancechange', () => { for (const session of this.sessions) session.terminal.options.theme = this.theme(); });
+  }
+  private theme() { return resolvedAppearance() === 'dark' ? { background: '#1c1c1e', foreground: '#eeeeef', cursor: '#69aaff', selectionBackground: '#334b68' } : { background: '#ffffff', foreground: '#262629', cursor: '#0068dc', selectionBackground: '#cde3ff' }; }
   get running() { return this.sessions.filter(s => !s.exited).length; }
   hide() { this.panel.hidden = true; }
   show() { this.panel.hidden = false; if (this.selected) this.select(this.selected); }
@@ -33,7 +37,7 @@ export class TerminalManager {
     this.opening = true;
     this.panel.hidden = false;
     const host = document.createElement('div'); host.className = 'terminal-host'; this.host.append(host);
-    const terminal = new Terminal({ cursorBlink: true, fontFamily: '"Cascadia Code", Consolas, monospace', fontSize: 12, scrollback: 3000, theme: { background: '#131618', foreground: '#d5d8d8', cursor: '#dfc18c', selectionBackground: '#66553e' }, allowProposedApi: false });
+    const terminal = new Terminal({ cursorBlink: true, fontFamily: '"Cascadia Code", Consolas, monospace', fontSize: 12, scrollback: 3000, theme: this.theme(), allowProposedApi: false });
     const fit = new FitAddon(); terminal.loadAddon(fit); terminal.open(host);
     const tab = document.createElement('button'); tab.className = 'terminal-tab';
     const label = `${project.name} · ${tool ? tool.engine + ' · ' + tool.action : kind === 'compose' ? 'Compose' : 'Terminal'}`;
