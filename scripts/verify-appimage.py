@@ -36,6 +36,8 @@ with tempfile.TemporaryDirectory(prefix='aurea-appimage-metadata-') as directory
     entry = configparser.ConfigParser(interpolation=None, strict=True)
     entry.optionxform = str
     assert entry.read(desktop_files[0]), 'Unable to read bundled desktop entry'
+    assert entry['Desktop Entry'].get('StartupWMClass') == 'aurea-code', 'Desktop identity must match direct IDE launches'
+    assert entry['Desktop Entry'].get('Icon') == 'aurea-code', 'Desktop entry must use the bundled application icon'
     embedded_version = entry['Desktop Entry'].get('X-AppImage-Version')
     assert embedded_version == version, f'Gear Lever version mismatch: {embedded_version!r} != {version!r}'
 print(f'Gear Lever version {version}, update metadata, asset name, URL, length and zsync digest verified.')

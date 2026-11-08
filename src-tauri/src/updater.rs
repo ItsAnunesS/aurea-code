@@ -157,7 +157,12 @@ fn launch_installed(app: tauri::AppHandle, state: tauri::State<'_, UpdaterState>
 }
 
 pub fn run() {
+    crate::desktop_identity::configure();
     let mut context = tauri::generate_context!();
+    context.set_default_window_icon(Some(
+        tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))
+            .expect("Bundled application icon"),
+    ));
     context.config_mut().identifier = "dev.aurea.code.updater".into();
     let window = &mut context.config_mut().app.windows[0];
     window.label = "updater".into();

@@ -6,6 +6,8 @@ export XDG_DATA_HOME
 XDG_DATA_HOME=$(mktemp -d)
 export GIT_CONFIG_GLOBAL="$XDG_DATA_HOME/test-gitconfig"
 export GIT_CONFIG_NOSYSTEM=1
+# Simulate the renamed desktop entry installed by Gear Lever.
+export GIO_LAUNCHED_DESKTOP_FILE="$XDG_DATA_HOME/aurea_code.desktop"
 trap 'rm -rf "$XDG_DATA_HOME"' EXIT
 dbus-run-session -- xvfb-run -a -s '-screen 0 1440x1000x24' bash -c '
   set -euo pipefail

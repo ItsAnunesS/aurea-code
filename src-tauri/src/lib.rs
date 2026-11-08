@@ -1,4 +1,5 @@
 mod database;
+mod desktop_identity;
 mod docker;
 mod files;
 mod git;
@@ -81,6 +82,12 @@ fn open_release(app: tauri::AppHandle) -> store::Result<()> {
 }
 
 pub fn run() {
+    desktop_identity::configure();
+    let mut context = tauri::generate_context!();
+    context.set_default_window_icon(Some(
+        tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png"))
+            .expect("Bundled application icon"),
+    ));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
         .plugin(tauri_plugin_dialog::init())
@@ -225,7 +232,7 @@ pub fn run() {
             open_app_menu,
             open_document_link
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("Unable to start Aurea Code");
     app.run(|app, event| {
         if let tauri::RunEvent::Exit = event {

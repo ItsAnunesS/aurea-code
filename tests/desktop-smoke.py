@@ -133,9 +133,41 @@ with tempfile.TemporaryDirectory(prefix='aurea-smoke-') as directory:
         x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
         x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
         xtest.XTestFakeKeyEvent.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+        # Check native identity/icon, not the logo rendered inside the webview.
+        class ClassHint(ctypes.Structure):
+            _fields_ = [('name', ctypes.c_void_p), ('class_name', ctypes.c_void_p)]
+        x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+        x11.XDefaultRootWindow.restype = ctypes.c_ulong
+        x11.XQueryTree.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.POINTER(ctypes.c_ulong)), ctypes.POINTER(ctypes.c_uint)]
+        x11.XGetClassHint.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(ClassHint)]
+        x11.XFree.argtypes = [ctypes.c_void_p]
+        x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+        x11.XInternAtom.restype = ctypes.c_ulong
+        x11.XGetWindowProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_void_p)]
         display = x11.XOpenDisplay(None)
         assert display
         try:
+            root, parent, count = ctypes.c_ulong(), ctypes.c_ulong(), ctypes.c_uint()
+            children = ctypes.POINTER(ctypes.c_ulong)()
+            x11.XQueryTree(display, x11.XDefaultRootWindow(display), ctypes.byref(root), ctypes.byref(parent), ctypes.byref(children), ctypes.byref(count))
+            matching = []
+            for index in range(count.value):
+                hint = ClassHint()
+                if x11.XGetClassHint(display, children[index], ctypes.byref(hint)):
+                    if hint.name and ctypes.string_at(hint.name).decode() == 'aurea_code': matching.append(children[index])
+                    if hint.name: x11.XFree(hint.name)
+                    if hint.class_name: x11.XFree(hint.class_name)
+            if children: x11.XFree(children)
+            assert matching, 'IDE must match the Gear Lever desktop entry instead of aurea-ide'
+            icon_sizes = []
+            atom = x11.XInternAtom(display, b'_NET_WM_ICON', 0)
+            for window in matching:
+                actual, size, remaining = ctypes.c_ulong(), ctypes.c_ulong(), ctypes.c_ulong()
+                format_bits, pixels = ctypes.c_int(), ctypes.c_void_p()
+                x11.XGetWindowProperty(display, window, atom, 0, 100000, 0, 0, ctypes.byref(actual), ctypes.byref(format_bits), ctypes.byref(size), ctypes.byref(remaining), ctypes.byref(pixels))
+                if format_bits.value == 32: icon_sizes.append(size.value)
+                if pixels: x11.XFree(pixels)
+            assert any(size >= 128 * 128 + 2 for size in icon_sizes), f'Native window icon is missing: {icon_sizes}'
             time.sleep(.2)
             for keysym in [0xff50, 0xff54, 0xff0d]:  # Home, Down, Return
                 code = x11.XKeysymToKeycode(display, keysym)

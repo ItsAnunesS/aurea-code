@@ -112,7 +112,7 @@ SQLite, scope, conflict/rollback, query-limit, and CSV tests also run in the nor
 
 ## Builds and Gear Lever
 
-The package contains two executables: `aurea-code` (updater) and `aurea-ide` (launcher and IDE). Both are built together; the desktop shortcut starts the updater. The updater stays hidden while the IDE runs to keep Linux AppImage mounts alive. Their windows and native command handlers are separate; workspace/project data remains in `dev.aurea.code`.
+The package contains two executables: `aurea-code` (updater) and `aurea-ide` (launcher and IDE). Both are built together; the desktop shortcut starts the updater. The updater stays hidden while the IDE runs to keep Linux AppImage mounts alive. On Linux both processes use the same desktop identity and bundled window icon. When launched through a desktop entry, its filename is used for GNOME/Wayland association, including entries renamed by Gear Lever; direct launches use `aurea-code`, matching the bundled StartupWMClass. Their windows and native command handlers are separate; workspace/project data remains in `dev.aurea.code`.
 
 Release publication signs the already-built Linux AppImage and produces `latest.json`. The public key is in `tauri.conf.json`; the private key must never enter Git. Before publishing, configure the repository Actions secret `TAURI_SIGNING_PRIVATE_KEY` with the local `.aurea-signing/updater.key` contents, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key is encrypted. Back up the private key securely: future updates must use the same key. Local signing material is ignored by Git. Normal branch builds and pull requests do not need signing secrets. Automatic publication requires them and never recompiles the application.
 
